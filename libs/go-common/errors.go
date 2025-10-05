@@ -1,4 +1,4 @@
-package common
+package go_common
 
 type ErrorCode string
 

@@ -1,8 +1,7 @@
-package common
+package go_common
 
 import (
-	"os"
-
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -11,16 +10,15 @@ var Logger *zap.Logger
 
 // InitLogger initializes the global Logger based on the current environment (e.g., development, QA, production).
 func InitLogger() {
-	env := os.Getenv("APP_ENV")
+	ginMode := gin.Mode()
 	var config zap.Config
-
-	if env == "dev" || env == "qa" {
-		config = zap.NewDevelopmentConfig()
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	} else { // pre. prod, or default
+	if gin.ReleaseMode == ginMode { // pre. prod, or default
 		config = zap.NewProductionConfig()
 		config.OutputPaths = []string{"stdout"}
 		config.ErrorOutputPaths = []string{"stderr"}
+	} else {
+		config = zap.NewDevelopmentConfig()
+		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
 
 	logger, err := config.Build()
