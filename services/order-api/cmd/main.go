@@ -15,6 +15,10 @@ func main() {
 	logger := common.Logger
 
 	// Setup dependencies
+	// Base Handler
+	baseHandler := handlers.NewBaseHandler(logger)
+
+	// Order Service
 	publisher := services.NewKafkaPublisher(logger)
 	orderService := services.NewOrderService(logger, publisher)
 	orderHandler := handlers.NewOrderHandler(logger, orderService)
@@ -22,6 +26,7 @@ func main() {
 	// Setup Gin
 	r := gin.Default()
 	orderHandler.RegisterRoutes(r)
+	baseHandler.RegisterRoutes(r)
 
 	port := os.Getenv("ORDER_SVC_PORT")
 	if port == "" {

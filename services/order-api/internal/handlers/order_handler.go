@@ -1,13 +1,10 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
-	"os"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common"
+	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
 	"go.uber.org/zap"
@@ -24,48 +21,40 @@ func NewOrderHandler(logger *zap.Logger, svc services.OrderService) *OrderHandle
 
 // RegisterRoutes registers order routes on the provided Gin engine.
 func (h *OrderHandler) RegisterRoutes(r *gin.Engine) {
-	// basic health check
-	r.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
-
 	r.POST("/orders", h.CreateOrder)
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	traceID := c.GetHeader("X-Trace-Id")
 	if traceID == "" {
-		traceID = generateTraceID()
+		traceID = common.GenerateTraceID()
 	}
 
 	var req views.OrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid request payload", zap.Error(err))
-		c.JSON(http.StatusBadRequest, go_common.ErrorResponse{
-			Code:    go_common.ErrInvalidInput,
-			Message: "invalid request payload",
+		c.JSON(http.StatusCreated, common.ErrorResponse{
 			TraceID: traceID,
+			Code:    common.ErrInvalidInput,
+			Message: "invalid request body",
+			Details: err.Error(),
 		})
 		return
 	}
 
-	orderID, err := h.service.CreateOrder(c.Request.Context(), req)
+	orderID, err := h.service.CreateOrder(c.Request.Context(), traceID, "userId", req)
 	if err != nil {
-		h.logger.Error("failed to create order", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, go_common.ErrorResponse{
-			Code:    go_common.ERRServerError,
-			Message: "failed to create order",
+		c.JSON(http.StatusInternalServerError, common.ErrorResponse{
 			TraceID: traceID,
+			Code:    common.ERRServerError,
+			Message: "failed to create order",
 		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, go_common.APIResponse{
+	c.JSON(http.StatusCreated, common.APIResponse{
 		TraceID: traceID,
 		Data: map[string]interface{}{
 			"orderId": orderID,
 		},
 	})
-}
-
-func generateTraceID() string {
-	return fmt.Sprintf("trc_%d_%d", time.Now().UnixNano(), os.Getpid())
 }

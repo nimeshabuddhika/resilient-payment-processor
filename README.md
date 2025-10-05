@@ -24,7 +24,7 @@ like data processing or image resizing, emphasizing reliability,and maintainabil
 * Deployment: Kubernetes via Helm Charts, including Ingress for API exposure.
 * Testing: Unit/integration tests with Go Test + Testify, Testcontainers for Kafka/Redis, JMeter load tests.
 * CI/CD: GitHub Actions for build, test, deploy.
-* Maintainability: Common library in `/pkg/common`.
+* Maintainability: Common library in `/libs`.
 
 # Installation
 
