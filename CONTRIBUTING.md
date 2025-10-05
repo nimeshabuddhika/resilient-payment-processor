@@ -1,4 +1,4 @@
-# Contributing to ResilientJobGo
+# Contributing to Resilient Payment Processor
 
 Thank you for considering contributing! We follow best practices to maintain a scalable, reliable codebase. Please read this guide before submitting changes.
 

@@ -1,4 +1,4 @@
-# ResilientJobGo
+# Resilient Payment Processor
 
 ResilientJobGo is an open-source demonstration of a scalable, event-driven job processing system
 built with Go microservices and Kafka. It showcases best practices in distributed systems, including horizontal scaling,
