@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/database"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/middleware"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/middlewares"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/config"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/handlers"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"

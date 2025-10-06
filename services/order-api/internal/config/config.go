@@ -1,9 +1,8 @@
 package config
 
 import (
-	"reflect"
-
 	"github.com/go-playground/validator/v10"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
 	"github.com/spf13/viper"
 )
 
@@ -32,7 +31,7 @@ func Load() (*Config, error) {
 	_ = viper.ReadInConfig() // Ignore if no file
 
 	var cfg Config
-	if err := parseStructEnv(&cfg); err != nil {
+	if err := pkg.ParseStructEnv(&cfg); err != nil {
 		return nil, err
 	}
 	// Validate after unmarshal
@@ -42,18 +41,4 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
-}
-
-// parseStructEnv binds env vars to struct fields using mapstructure tag
-func parseStructEnv(cfg interface{}) error {
-	v := reflect.ValueOf(cfg).Elem()
-	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		tag := field.Tag.Get("mapstructure")
-		if err := viper.BindEnv(tag); err != nil {
-			return err
-		}
-	}
-	return viper.Unmarshal(cfg)
 }
