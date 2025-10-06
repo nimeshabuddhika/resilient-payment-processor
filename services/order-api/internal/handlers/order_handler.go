@@ -35,8 +35,8 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	}
 
 	var req views.OrderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusCreated, common.ErrorResponse{
+	if err = c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, common.ErrorResponse{
 			Code:    common.ErrInvalidInput,
 			Message: "invalid request body",
 			Details: err.Error(),

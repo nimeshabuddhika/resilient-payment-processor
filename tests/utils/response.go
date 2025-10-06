@@ -1,0 +1,10 @@
+package testutils
+
+type ApiResponse struct {
+	Data map[string]interface{} `json:"data"`
+}
+type ErrorResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Details string `json:"details"`
+}

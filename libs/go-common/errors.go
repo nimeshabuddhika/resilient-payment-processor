@@ -8,8 +8,7 @@ const (
 )
 
 type ErrorResponse struct {
-	Code    ErrorCode `json:"code"`              // internal error code
-	Message string    `json:"message"`           // user-friendly message
-	TraceID string    `json:"traceId,omitempty"` // unique identifier for the API request
+	Code    ErrorCode `json:"code"`    // internal error code
+	Message string    `json:"message"` // user-friendly message
 	Details string    `json:"details,omitempty"`
 }
