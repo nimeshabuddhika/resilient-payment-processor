@@ -1,10 +1,26 @@
 package go_common
 
 import (
+	"errors"
+
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-// GenerateTraceID TODO - Use a library for cryptographically secure, unique IDs. Integrate with OpenTelemetry
-func GenerateTraceID() string {
+// GenerateUUID generates a new UUID.
+func GenerateUUID() string {
 	return uuid.New().String()
+}
+
+// IsEmpty checks if a string is empty.
+func IsEmpty(s string) bool {
+	return s == ""
+}
+
+func GetTraceID(c *gin.Context) (string, error) {
+	traceID := c.GetString(TRACE_ID)
+	if IsEmpty(traceID) {
+		return "", errors.New("trace id is empty")
+	}
+	return traceID, nil
 }

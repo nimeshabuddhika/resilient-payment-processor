@@ -20,20 +20,23 @@ func NewOrderHandler(logger *zap.Logger, svc services.OrderService) *OrderHandle
 }
 
 // RegisterRoutes registers order routes on the provided Gin engine.
-func (h *OrderHandler) RegisterRoutes(r *gin.Engine) {
+func (h *OrderHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/orders", h.CreateOrder)
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	traceID := c.GetHeader("X-Trace-Id")
-	if traceID == "" {
-		traceID = common.GenerateTraceID()
+	traceID, err := common.GetTraceID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, common.ErrorResponse{
+			Code:    common.ERRServerError,
+			Message: err.Error(),
+		})
+		return
 	}
 
 	var req views.OrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusCreated, common.ErrorResponse{
-			TraceID: traceID,
 			Code:    common.ErrInvalidInput,
 			Message: "invalid request body",
 			Details: err.Error(),
@@ -44,7 +47,6 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	orderID, err := h.service.CreateOrder(c.Request.Context(), traceID, "userId", req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, common.ErrorResponse{
-			TraceID: traceID,
 			Code:    common.ERRServerError,
 			Message: "failed to create order",
 		})
@@ -52,7 +54,6 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, common.APIResponse{
-		TraceID: traceID,
 		Data: map[string]interface{}{
 			"orderId": orderID,
 		},

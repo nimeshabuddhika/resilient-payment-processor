@@ -6,11 +6,13 @@ type KafkaPublisher interface {
 }
 
 type KafkaPublisherImpl struct {
-	logger *zap.Logger
+	logger    *zap.Logger
+	kafkaAddr string
 }
 
-func NewKafkaPublisher(logger *zap.Logger) KafkaPublisher {
+func NewKafkaPublisher(logger *zap.Logger, kafkaAddr string) KafkaPublisher {
 	return &KafkaPublisherImpl{
-		logger: logger,
+		logger:    logger,
+		kafkaAddr: kafkaAddr,
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -17,6 +18,7 @@ func NewBaseHandler(logger *zap.Logger) *BaseHandler {
 
 func (b *BaseHandler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/health", b.GetHealth)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler())) // Expose for scrape
 }
 
 func (b *BaseHandler) GetHealth(c *gin.Context) {

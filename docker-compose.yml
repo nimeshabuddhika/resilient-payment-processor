@@ -1,0 +1,82 @@
+version: '3'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  postgres:
+    image: postgres:17.5
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: db_user # For local development only
+      POSTGRES_PASSWORD: db_password # For local development only
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  order-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.order-api
+    container_name: order-api
+    restart: unless-stopped
+    ports:
+      - "8081:8081"  # Expose for local access
+    environment:
+      GIN_MODE: "debug"
+      APP_PORT: "8081"
+      APP_KAFKA_BROKERS: "kafka:9092"  # Internal resolution
+      APP_DB_URL: "postgres://db_user:db_password@postgres:5432/db_name?sslmode=disable"  # For local development only
+    depends_on:
+      - kafka
+      - postgres
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"  # Web UI
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml  # Mount config
+      - prometheus-data:/prometheus  # Persistence
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - order-api  # Scrape targets
+  grafana:
+    image: grafana/grafana:12.2
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # Web UI (admin/admin default)
+    volumes:
+      - grafana-data:/var/lib/grafana  # Persistence
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning  # Auto-config DS/dashboards
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin  # For local development only
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  prometheus-data:
+  grafana-data:
