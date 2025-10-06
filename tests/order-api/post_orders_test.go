@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common"
+	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
 	testutils "github.com/nimeshabuddhika/resilient-payment-processor/tests/utils"
 	"github.com/stretchr/testify/assert"
 )

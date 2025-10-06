@@ -8,6 +8,10 @@ services:
       - "2181:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-data:/var/lib/zookeeper/log
+      - zookeeper-secrets:/etc/zookeeper/secrets
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: kafka
@@ -20,6 +24,9 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+      - kafka-secrets:/etc/kafka/secrets
   postgres:
     image: postgres:17.5
     container_name: postgres
@@ -31,6 +38,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./configs/postgres/1_db_init.sh:/docker-entrypoint-initdb.d/1_db_init.sh:ro # Create `resilient_payment_processor` database and `service_schema` schema
 
   order-api:
     build:
@@ -55,7 +63,7 @@ services:
     ports:
       - "9090:9090"  # Web UI
     volumes:
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml  # Mount config
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml  # Mount config
       - prometheus-data:/prometheus  # Persistence
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -80,3 +88,7 @@ volumes:
   pgdata:
   prometheus-data:
   grafana-data:
+  kafka-data:
+  kafka-secrets:
+  zookeeper-data:
+  zookeeper-secrets:

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common"
+	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
 )
 
 func PostRequest(t *testing.T, url string, payload interface{}) (*http.Response, error) {
@@ -25,7 +25,7 @@ func PostRequest(t *testing.T, url string, payload interface{}) (*http.Response,
 }
 
 func GetTraceId(resp *http.Response) string {
-	return resp.Header.Get(common.HEADER_TRACEID)
+	return resp.Header.Get(common.HeaderTraceId)
 }
 
 func DecodeSuccess(r io.Reader) (ApiResponse, error) {

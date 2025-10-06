@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
 	"go.uber.org/zap"
@@ -25,10 +25,10 @@ func (h *OrderHandler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	traceID, err := common.GetTraceID(c)
+	traceID, err := pkg.GetTraceID(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, common.ErrorResponse{
-			Code:    common.ERRServerError,
+		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
+			Code:    pkg.ERRServerError,
 			Message: err.Error(),
 		})
 		return
@@ -36,8 +36,8 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 	var req views.OrderRequest
 	if err = c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, common.ErrorResponse{
-			Code:    common.ErrInvalidInput,
+		c.JSON(http.StatusBadRequest, pkg.ErrorResponse{
+			Code:    pkg.ErrInvalidInput,
 			Message: "invalid request body",
 			Details: err.Error(),
 		})
@@ -46,14 +46,14 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 	orderID, err := h.service.CreateOrder(c.Request.Context(), traceID, "userId", req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, common.ErrorResponse{
-			Code:    common.ERRServerError,
+		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
+			Code:    pkg.ERRServerError,
 			Message: "failed to create order",
 		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, common.APIResponse{
+	c.JSON(http.StatusCreated, pkg.APIResponse{
 		Data: map[string]interface{}{
 			"orderId": orderID,
 		},

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
 	"go.uber.org/zap"
 )
@@ -26,11 +26,11 @@ func NewOrderService(logger *zap.Logger, publisher KafkaPublisher) OrderService 
 	}
 }
 
-func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, userId string, req views.OrderRequest) (string, error) {
+func (s *OrderServiceImpl) CreateOrder(_ context.Context, traceId string, userId string, req views.OrderRequest) (string, error) {
 	// For now, simulate order creation by generating a simple ID and logging the request.
 	orderID := fmt.Sprintf("ord_%d", time.Now().UnixNano())
 	s.logger.Info("order created",
-		zap.String(common.TRACE_ID, traceId),
+		zap.String(pkg.TraceId, traceId),
 		zap.String("orderId", orderID),
 		zap.String("userId", userId),
 		zap.String("accountId", req.AccountID),

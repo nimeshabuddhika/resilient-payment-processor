@@ -1,4 +1,4 @@
-package go_common
+package pkg
 
 import (
 	"errors"
@@ -18,7 +18,7 @@ func IsEmpty(s string) bool {
 }
 
 func GetTraceID(c *gin.Context) (string, error) {
-	traceID := c.GetString(TRACE_ID)
+	traceID := c.GetString(TraceId)
 	if IsEmpty(traceID) {
 		return "", errors.New("trace id is empty")
 	}

@@ -1,4 +1,4 @@
-package go_common
+package pkg
 
 import (
 	"github.com/gin-gonic/gin"

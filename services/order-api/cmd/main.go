@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-common/middleware"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/database"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/middleware"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/config"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/handlers"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
@@ -21,13 +22,32 @@ import (
 
 func main() {
 	// Initialize logger
-	common.InitLogger()
-	logger := common.Logger
+	pkg.InitLogger()
+	logger := pkg.Logger
 
 	// Load config
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Fatal("failed to load config", zap.Error(err))
+	}
+
+	// Initialize postgres db
+	dbConfig := database.Config{
+		PrimaryDSN:  cfg.PrimaryDbAddr,
+		ReplicaDSNs: []string{cfg.ReplicaDbAddr},
+		MaxConns:    cfg.MaxDbCons,
+		MinConns:    cfg.MinDbCons,
+	}
+	_, disconnect, err := database.New(context.Background(), logger, dbConfig)
+	if err != nil {
+		logger.Fatal("failed to initialize database", zap.Error(err))
+	}
+	defer disconnect()
+
+	// Initialize db migrations
+	err = database.RunMigrations(logger, cfg.PrimaryDbAddr)
+	if err != nil {
+		logger.Fatal("failed to run database migrations", zap.Error(err))
 	}
 
 	// Setup dependencies
@@ -46,8 +66,8 @@ func main() {
 
 	// Group routes with /api/v1 prefix for versioning
 	api := r.Group("/api/v1")
-	api.Use(middleware.TraceID()) // Add trace ID middleware
-	api.Use(middleware.Metrics()) // Add latency middleware
+	api.Use(pkgmiddleware.TraceID()) // Add trace ID middleware
+	api.Use(pkgmiddleware.Metrics()) // Add latency middleware
 
 	orderHandler.RegisterRoutes(api)
 	baseHandler.RegisterRoutes(r)

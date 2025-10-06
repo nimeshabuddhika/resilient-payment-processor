@@ -4,8 +4,8 @@ global:
 scrape_configs:
   - job_name: 'order-api'
     static_configs:
-      - targets: ['order-api:8081']  # Internal service; add labels for multi-replica
+      - targets: [ 'order-api:8081' ]  # Internal service; add labels for multi-replica
     metrics_path: /metrics
   - job_name: 'prometheus'  # Self-monitor
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: [ 'localhost:9090' ]

@@ -1,16 +1,29 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"reflect"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/spf13/viper"
+)
 
 type Config struct {
-	Port         string `mapstructure:"PORT"`
-	KafkaBrokers string `mapstructure:"KAFKA_BROKERS"`
+	Port          string `mapstructure:"PORT" validate:"required"`
+	KafkaBrokers  string `mapstructure:"KAFKA_BROKERS" validate:"required"`
+	PrimaryDbAddr string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
+	ReplicaDbAddr string `mapstructure:"REPLICA_DB_ADDR"`
+	MaxDbCons     int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
+	MinDbCons     int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
 }
 
 func Load() (*Config, error) {
 	viper.SetEnvPrefix("app") // Prefix for env vars
 	viper.AutomaticEnv()
+
+	// Default values
 	viper.SetDefault("PORT", "8080")
+	viper.SetDefault("MAX_DB_CONNECTIONS", "10")
+	viper.SetDefault("MIN_DB_CONNECTIONS", "2")
 
 	// Optional: Read from config.yaml if exists
 	viper.SetConfigName("config")
@@ -19,8 +32,28 @@ func Load() (*Config, error) {
 	_ = viper.ReadInConfig() // Ignore if no file
 
 	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
+	if err := parseStructEnv(&cfg); err != nil {
 		return nil, err
 	}
+	// Validate after unmarshal
+	validate := validator.New()
+	if err := validate.Struct(&cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+// parseStructEnv binds env vars to struct fields using mapstructure tag
+func parseStructEnv(cfg interface{}) error {
+	v := reflect.ValueOf(cfg).Elem()
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("mapstructure")
+		if err := viper.BindEnv(tag); err != nil {
+			return err
+		}
+	}
+	return viper.Unmarshal(cfg)
 }
