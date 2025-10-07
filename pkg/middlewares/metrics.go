@@ -1,4 +1,4 @@
-package pkgmiddleware
+package middleware
 
 import (
 	"strconv"
@@ -17,18 +17,18 @@ var (
 			Name:      "http_request_duration_seconds",
 			Help:      "Duration of HTTP requests in seconds",
 			Buckets: []float64{
-				0.005, // requests < 5ms
-				0.01,  // requests < 10ms
-				0.025, // requests < 25ms
-				0.05,  // requests < 50ms
-				0.1,   // requests < 100ms
-				0.25,  // requests < 250ms
-				0.5,   // requests < 500ms
-				1,     // requests < 1s
-				2.5,   // requests < 2.5s
-				5,     // requests < 5s
-				10,    // requests < 10s
-			}, // ms-scale (e.g., 5ms-10s); tune for jobs
+				0.005, // request < 5ms
+				0.01,  // request < 10ms
+				0.025, // request < 25ms
+				0.05,  // request < 50ms
+				0.1,   // request < 100ms
+				0.25,  // request < 250ms
+				0.5,   // request < 500ms
+				1,     // request < 1s
+				2.5,   // request < 2.5s
+				5,     // request < 5s
+				10,    // request < 10s
+			}, // 5ms-10s buckets
 		},
 		[]string{"method", "path", "status"}, // Labels for granularity
 	)

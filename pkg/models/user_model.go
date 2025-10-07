@@ -1,4 +1,4 @@
-package pkgmodels
+package models
 
 import (
 	"time"

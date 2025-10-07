@@ -1,11 +1,11 @@
-package pkgrepositories
+package repositories
 
 import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	pkgmodels "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/models"
+	pkgmodels "github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
 )
 
 // AccountRepository defines the interface for account repository.

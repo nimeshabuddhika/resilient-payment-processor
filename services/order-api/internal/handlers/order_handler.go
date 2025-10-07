@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
 	"go.uber.org/zap"

@@ -3,8 +3,9 @@ package configs
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 // Config holds application configuration loaded from environment variables and optional config file.
@@ -17,14 +18,18 @@ type Config struct {
 }
 
 // Load reads configuration from environment (and optional config file), then validates it.
-func Load() (*Config, error) {
+func Load(logger *zap.Logger) (*Config, error) {
 	viper.SetEnvPrefix("app") // Prefix for env vars
 	viper.AutomaticEnv()
 
 	// Optional: Read from config.yaml if exists
 	if gin.ReleaseMode == gin.Mode() {
 		viper.SetConfigName("config.prod")
+	} else if gin.TestMode == gin.Mode() {
+		logger.Warn("running in test mode")
+		viper.SetConfigName("config.test")
 	} else {
+		logger.Warn("running in development mode")
 		viper.SetConfigName("config.dev")
 	}
 	viper.SetConfigType("yaml")

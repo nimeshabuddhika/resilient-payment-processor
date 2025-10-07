@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	common "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	testutils "github.com/nimeshabuddhika/resilient-payment-processor/tests/utils"
 	"github.com/stretchr/testify/assert"
 )
@@ -64,7 +64,7 @@ func TestCreateOrder_InvalidAmount_Less_Than_minimum(t *testing.T) {
 	out, err := testutils.DecodeError(resp.Body)
 
 	assert.NoError(t, err)
-	assert.Equal(t, string(common.ErrInvalidInput), out.Code)
+	assert.Equal(t, string(pkg.ErrInvalidInput), out.Code)
 	assert.NotEmpty(t, out.Message)
 	assert.NotEmpty(t, out.Details)
 }

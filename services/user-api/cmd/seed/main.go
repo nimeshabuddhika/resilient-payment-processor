@@ -9,11 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/database"
-	pkgmodels "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/models"
-	pkgrepositories "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/repositories"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
+	pkgmodels "github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
+	pkgrepositories "github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/user-api/configs"
 	"go.uber.org/zap"
 )
@@ -35,7 +35,7 @@ func main() {
 	logger := pkg.Logger
 	defer logger.Sync()
 
-	cfg, err := configs.Load()
+	cfg, err := configs.Load(logger)
 	if err != nil {
 		logger.Fatal("failed to load config", zap.Error(err))
 	}

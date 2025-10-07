@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"go.uber.org/zap"
 )
 

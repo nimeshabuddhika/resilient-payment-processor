@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
 	"go.uber.org/zap"
 )

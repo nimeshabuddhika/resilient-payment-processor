@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/spf13/viper"
 )
 
