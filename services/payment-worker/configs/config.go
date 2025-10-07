@@ -9,7 +9,6 @@ import (
 )
 
 type Config struct {
-	Port           string `mapstructure:"PORT" validate:"required"`
 	KafkaBrokers   string `mapstructure:"KAFKA_BROKERS" validate:"required"`
 	PrimaryDbAddr  string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
 	ReplicaDbAddr  string `mapstructure:"REPLICA_DB_ADDR"`
@@ -25,7 +24,6 @@ func Load(logger *zap.Logger) (*Config, error) {
 	viper.AutomaticEnv()
 
 	// Default values
-	viper.SetDefault("PORT", "8080")
 	viper.SetDefault("MAX_DB_CONNECTIONS", "10")
 	viper.SetDefault("MIN_DB_CONNECTIONS", "2")
 	viper.SetDefault("KAFKA_RETRY", "3")
@@ -42,7 +40,7 @@ func Load(logger *zap.Logger) (*Config, error) {
 		viper.SetConfigName("config.dev")
 	}
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./services/order-api/configs")
+	viper.AddConfigPath("./services/payment-worker/configs")
 	_ = viper.ReadInConfig() // Ignore if no file
 
 	var cfg Config

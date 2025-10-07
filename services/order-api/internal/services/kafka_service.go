@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
+	"github.com/google/uuid"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	"go.uber.org/zap"
 )
@@ -14,7 +15,7 @@ const (
 )
 
 type KafkaPublisher interface {
-	PublishOrder(order models.Order) error
+	PublishOrder(userUUID uuid.UUID, paymentJob views.PaymentJob) error
 	Close()
 }
 
@@ -43,15 +44,15 @@ func NewKafkaPublisher(logger *zap.Logger, cnf *configs.Config) KafkaPublisher {
 	}
 }
 
-func (k KafkaPublisherImpl) PublishOrder(order models.Order) error {
+func (k KafkaPublisherImpl) PublishOrder(userUUID uuid.UUID, paymentJob views.PaymentJob) error {
 	// Serialize the order payload to JSON for Kafka transport
-	msgBytes, err := json.Marshal(order)
+	msgBytes, err := json.Marshal(paymentJob)
 	if err != nil {
 		return err
 	}
 
 	// Deterministic partitioning by user ID to balanced load
-	partition := int32(order.UserID.ID() % k.cnf.KafkaPartition)
+	partition := int32(userUUID.ID() % k.cnf.KafkaPartition)
 
 	// Kafka topic as a variable (cannot take the address of a constant)
 	topic := TopicOrdersPlaced
@@ -61,8 +62,8 @@ func (k KafkaPublisherImpl) PublishOrder(order models.Order) error {
 			Topic:     &topic,
 			Partition: partition, // target partition for ordering/affinity
 		},
-		Key:   []byte(order.IdempotencyKey.String()), // key for idempotency and partitioning semantics
-		Value: msgBytes,                              // serialized order payload
+		Key:   []byte(paymentJob.IdempotencyKey), // key for idempotency and partitioning semantics
+		Value: msgBytes,                          // serialized order payload
 	}, nil)
 }
 

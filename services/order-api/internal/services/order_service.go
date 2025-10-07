@@ -53,7 +53,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		AccountID:      req.AccountID,
 		IdempotencyKey: req.IdempotencyID,
 		Amount:         req.Amount,
-		Status:         models.OrderStatusPending,
+		Status:         pkg.OrderStatusPending,
 		CreatedAt:      time.Now().UTC(),
 		UpdatedAt:      time.Now().UTC(),
 	}
@@ -73,7 +73,9 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		if err != nil {
 			return pkg.HandleSQLError(traceId, s.logger, err)
 		}
-		accountBalanceStr, err := utils.DecryptAES(account.Balance, s.aesKey)
+
+		// decrypt balance
+		accountBalanceStr, err := utils.DecryptAES(account.Balance, s.aesKey) // TODO: use a key manager or call user-api to get the balance
 		if err != nil {
 			s.logger.Error("Failed to decrypt balance", zap.String(pkg.TraceId, traceId), zap.Error(err))
 			return err
@@ -85,10 +87,12 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 			return err
 		}
 
+		// Check balance
 		if accountBalance < req.Amount {
 			return fmt.Errorf("insufficient balance: %d < %d", account.Balance, req.Amount)
 		}
 
+		// Create order
 		_, err = s.orderRepo.Create(ctx, tx, order)
 		if err != nil {
 			return pkg.HandleSQLError(traceId, s.logger, err)
@@ -99,8 +103,9 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		return "", err
 	}
 
+	paymentJob := order.ToPaymentJob()
 	// Publish after commit
-	if err = s.kafkaPublisher.PublishOrder(order); err != nil {
+	if err = s.kafkaPublisher.PublishOrder(userId, paymentJob); err != nil {
 		s.logger.Error("Failed to publish order", zap.String(pkg.TraceId, traceId), zap.Error(err))
 		// TODO: Enqueue for retry or DLQ; don't fail API
 	}
