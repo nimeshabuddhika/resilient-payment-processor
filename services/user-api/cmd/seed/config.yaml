@@ -1,6 +1,0 @@
-
-# Configuration for User API Seed
-
-#PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema"
-MAX_DB_CONNECTIONS: 10
-MIN_DB_CONNECTIONS: 2

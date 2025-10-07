@@ -14,7 +14,7 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/database"
 	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/middlewares"
-	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/config"
+	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/handlers"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
 	"go.uber.org/zap"
@@ -26,7 +26,7 @@ func main() {
 	logger := pkg.Logger
 
 	// Load config
-	cfg, err := config.Load()
+	cfg, err := configs.Load()
 	if err != nil {
 		logger.Fatal("failed to load config", zap.Error(err))
 	}

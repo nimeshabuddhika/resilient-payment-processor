@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +36,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg Config) (*DB, func(), erro
 
 	readers := make([]*pgxpool.Pool, 0)
 	for _, dsn := range cfg.ReplicaDSNs {
-		if pkg.IsEmpty(dsn) {
+		if utils.IsEmpty(dsn) {
 			continue
 		}
 		reader, err := newPool(ctx, logger, dsn, cfg.MaxConns, cfg.MinConns)

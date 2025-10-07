@@ -8,7 +8,9 @@ import (
 	pkgmodels "github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/models"
 )
 
+// UserRepository defines the interface for user repository.
 type UserRepository interface {
+	// Create creates a new user.
 	Create(ctx context.Context, tx pgx.Tx, user pkgmodels.User) (pgconn.CommandTag, error)
 }
 

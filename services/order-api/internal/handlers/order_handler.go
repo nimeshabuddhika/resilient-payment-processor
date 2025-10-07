@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/libs/go-pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
 	"go.uber.org/zap"
@@ -25,7 +26,7 @@ func (h *OrderHandler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	traceID, err := pkg.GetTraceID(c)
+	traceID, err := utils.GetTraceID(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
 			Code:    pkg.ERRServerError,
