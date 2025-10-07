@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
-	pkgmodels "github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
-	pkgrepositories "github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/user-api/configs"
 	"go.uber.org/zap"
@@ -67,11 +67,11 @@ func main() {
 	}
 
 	// Initialize user repository
-	userRepo := pkgrepositories.NewUserRepository()
+	userRepo := repositories.NewUserRepository()
 	// Initialize account repository
-	accountRepo := pkgrepositories.NewAccountRepository()
+	accountRepo := repositories.NewAccountRepository()
 	// Initialize order repository
-	orderRepo := pkgrepositories.NewOrderRepository()
+	orderRepo := repositories.NewOrderRepository()
 
 	minBal := *minAccountBalance
 	maxBal := *maxAccountBalance
@@ -87,7 +87,7 @@ func main() {
 			// Create users (ON CONFLICT DO NOTHING to allow re-runs).
 			logger.Info("Creating user", zap.Int("i", i), zap.Any("userId", userID))
 
-			_, err = userRepo.Create(ctx, tx, pkgmodels.User{
+			_, err = userRepo.Create(ctx, tx, models.User{
 				ID:        userID,
 				Username:  fmt.Sprintf("user_%d", i),
 				CreatedAt: time.Now(),
@@ -108,7 +108,7 @@ func main() {
 				}
 				accID := uuid.New()
 				// Create accounts (ON CONFLICT DO NOTHING to allow re-runs).
-				_, err = accountRepo.Create(ctx, tx, pkgmodels.Account{
+				_, err = accountRepo.Create(ctx, tx, models.Account{
 					ID:        accID,
 					UserID:    userID,
 					Balance:   balEnc,
@@ -130,12 +130,12 @@ func main() {
 					}
 					logger.Info("Creating order", zap.Any("userId", userID), zap.Any("accountId", accID), zap.Float64("amt", amt), zap.Bool("isFraud", isFraud))
 
-					_, err := orderRepo.CreateAiDataset(ctx, tx, pkgmodels.Order{
+					_, err := orderRepo.CreateAiDataset(ctx, tx, models.Order{
 						UserID:         userID,
 						AccountID:      accID,
 						IdempotencyKey: uuid.New(),
 						Amount:         amt,
-						Status:         "pending",
+						Status:         models.OrderStatusPending,
 						CreatedAt:      time.Now(),
 						UpdatedAt:      time.Now(),
 					}, isFraud)

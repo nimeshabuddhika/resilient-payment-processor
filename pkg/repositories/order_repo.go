@@ -2,7 +2,9 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
@@ -14,6 +16,7 @@ type OrderRepository interface {
 	// CreateAiDataset creates a new order in the AI dataset table.
 	// This is used for training the AI model.
 	CreateAiDataset(ctx context.Context, tx pgx.Tx, order models.Order, isFraud bool) (pgconn.CommandTag, error)
+	FindByIdempotencyKey(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID) (bool, error)
 }
 type OrderRepositoryImpl struct {
 }
@@ -49,4 +52,17 @@ func (o OrderRepositoryImpl) CreateAiDataset(ctx context.Context, tx pgx.Tx, ord
 		order.CreatedAt,
 		order.UpdatedAt,
 	)
+}
+
+// FindByIdempotencyKey finds an order by idempotency key.
+func (o OrderRepositoryImpl) FindByIdempotencyKey(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID) (bool, error) {
+	if idempotencyID == uuid.Nil {
+		return false, errors.New("idempotency key cannot be nil")
+	}
+	var exists bool
+	err := tx.QueryRow(ctx, `
+							SELECT EXISTS(SELECT 1 FROM orders WHERE idempotency_key = $1)`,
+		idempotencyID,
+	).Scan(&exists)
+	return exists, err
 }

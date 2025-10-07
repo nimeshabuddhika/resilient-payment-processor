@@ -9,12 +9,15 @@ import (
 )
 
 type Config struct {
-	Port          string `mapstructure:"PORT" validate:"required"`
-	KafkaBrokers  string `mapstructure:"KAFKA_BROKERS" validate:"required"`
-	PrimaryDbAddr string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
-	ReplicaDbAddr string `mapstructure:"REPLICA_DB_ADDR"`
-	MaxDbCons     int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
-	MinDbCons     int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
+	Port           string `mapstructure:"PORT" validate:"required"`
+	KafkaBrokers   string `mapstructure:"KAFKA_BROKERS" validate:"required"`
+	PrimaryDbAddr  string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
+	ReplicaDbAddr  string `mapstructure:"REPLICA_DB_ADDR"`
+	MaxDbCons      int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
+	MinDbCons      int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
+	KafkaRetry     int    `mapstructure:"KAFKA_RETRY"`
+	KafkaPartition uint32 `mapstructure:"KAFKA_PARTITION"`
+	AesKey         string `mapstructure:"AES_KEY" validate:"required"`
 }
 
 func Load(logger *zap.Logger) (*Config, error) {
@@ -25,6 +28,8 @@ func Load(logger *zap.Logger) (*Config, error) {
 	viper.SetDefault("PORT", "8080")
 	viper.SetDefault("MAX_DB_CONNECTIONS", "10")
 	viper.SetDefault("MIN_DB_CONNECTIONS", "2")
+	viper.SetDefault("KAFKA_RETRY", "3")
+	viper.SetDefault("KAFKA_PARTITION", "4")
 
 	// Optional: Read from config.yaml if exists
 	if gin.ReleaseMode == gin.Mode() {

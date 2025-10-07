@@ -1,9 +1,11 @@
 package pkg
 
 const (
-	HeaderTraceId string = "X-Trace-Id"
+	HeaderTraceId   string = "X-Trace-Id"
+	HeaderRequestId string = "X-Request-Id"
 )
 
 const (
-	TraceId string = "trace_id"
+	TraceId   string = "trace_id"
+	RequestId string = "request_id"
 )

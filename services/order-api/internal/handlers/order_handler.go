@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
@@ -34,6 +35,14 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		})
 		return
 	}
+	userIdStr := c.GetHeader("userId") // TODO : User Id should be retrieve from JWT Authorization header. This is for demo purpose only.
+	userUUID, err := uuid.Parse(userIdStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
+			Code:    pkg.ERRServerError,
+			Message: "failed to parse user UUID from header",
+		})
+	}
 
 	var req views.OrderRequest
 	if err = c.ShouldBindJSON(&req); err != nil {
@@ -45,11 +54,11 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	orderID, err := h.service.CreateOrder(c.Request.Context(), traceID, "userId", req)
+	orderID, err := h.service.CreateOrder(c.Request.Context(), traceID, userUUID, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
 			Code:    pkg.ERRServerError,
-			Message: "failed to create order",
+			Message: err.Error(),
 		})
 		return
 	}

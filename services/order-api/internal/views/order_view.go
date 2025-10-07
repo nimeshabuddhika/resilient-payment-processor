@@ -1,11 +1,15 @@
 package views
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type OrderRequest struct {
-	IdempotencyKey  string    `json:"idempotencyKey" binding:"required"` // Client-provided UUID for idempotency
-	AccountID       string    `json:"accountId" binding:"required"`
-	Amount          float64   `json:"amount" binding:"required,gt=0,lte=1500"`
+	IdempotencyID   uuid.UUID `json:"idempotencyId" binding:"required,uuid"` // Client-provided UUID for idempotency
+	AccountID       uuid.UUID `json:"accountId" binding:"required,uuid"`
+	Amount          float64   `json:"amount" binding:"required,gt=0,lte=5000"`
 	Currency        string    `json:"currency" binding:"required,oneof=USD CAD"`
 	Timestamp       time.Time `json:"timestamp"`
 	IPAddress       string    `json:"ipAddress"`

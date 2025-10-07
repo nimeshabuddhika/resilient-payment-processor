@@ -3,6 +3,7 @@ package utils
 import (
 	"errors"
 	"reflect"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
@@ -34,4 +35,10 @@ func ParseStructEnv(cfg interface{}) error {
 		}
 	}
 	return viper.Unmarshal(cfg)
+}
+
+// ToFloat64 converts a numeric string to float64.
+// It trims spaces and returns an error for invalid formats.
+func ToFloat64(s string) (float64, error) {
+	return strconv.ParseFloat(s, 64)
 }

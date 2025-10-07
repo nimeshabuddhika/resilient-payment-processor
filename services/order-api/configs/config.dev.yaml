@@ -1,0 +1,4 @@
+# Configuration for Order API
+# For local development only
+AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
+

@@ -14,6 +14,7 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
 	middleware "github.com/nimeshabuddhika/resilient-payment-processor/pkg/middlewares"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/handlers"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
@@ -38,7 +39,7 @@ func main() {
 		MaxConns:    cfg.MaxDbCons,
 		MinConns:    cfg.MinDbCons,
 	}
-	_, disconnect, err := database.New(context.Background(), logger, dbConfig)
+	db, disconnect, err := database.New(context.Background(), logger, dbConfig)
 	if err != nil {
 		logger.Fatal("failed to initialize database", zap.Error(err))
 	}
@@ -55,10 +56,12 @@ func main() {
 	baseHandler := handlers.NewBaseHandler(logger)
 
 	// Kafka Publisher: Pass config for brokers to enable actual publishing
-	publisher := services.NewKafkaPublisher(logger, cfg.KafkaBrokers)
+	publisher := services.NewKafkaPublisher(logger, cfg)
 
 	// Order Service: Business logic for job creation and Kafka publish
-	orderService := services.NewOrderService(logger, publisher)
+	orderRepo := repositories.NewOrderRepository()
+	accountRepo := repositories.NewAccountRepository()
+	orderService := services.NewOrderService(logger, cfg, publisher, db, orderRepo, accountRepo)
 	orderHandler := handlers.NewOrderHandler(logger, orderService)
 
 	// Setup Gin router: TODO extracting to a func NewRouter() *gin.Engine for reuse/testability
@@ -66,8 +69,8 @@ func main() {
 
 	// Group routes with /api/v1 prefix for versioning
 	api := r.Group("/api/v1")
-	api.Use(middleware.TraceID()) // Add trace ID middleware
-	api.Use(middleware.Metrics()) // Add latency middleware
+	api.Use(middleware.TraceID(logger)) // Add trace ID middleware
+	api.Use(middleware.Metrics())       // Add latency middleware
 
 	orderHandler.RegisterRoutes(api)
 	baseHandler.RegisterRoutes(r)

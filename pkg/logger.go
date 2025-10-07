@@ -12,18 +12,20 @@ var Logger *zap.Logger
 func InitLogger() {
 	ginMode := gin.Mode()
 	var config zap.Config
+
 	if gin.ReleaseMode == ginMode { // pre. prod, or default
 		config = zap.NewProductionConfig()
 		config.OutputPaths = []string{"stdout"}
 		config.ErrorOutputPaths = []string{"stderr"}
+
 	} else {
 		config = zap.NewDevelopmentConfig()
 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
-
-	logger, err := config.Build()
+	logger, err := config.Build(zap.AddStacktrace(zap.DPanicLevel))
 	if err != nil {
 		panic(err)
 	}
+
 	Logger = logger
 }
