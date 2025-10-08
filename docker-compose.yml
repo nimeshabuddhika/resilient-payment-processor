@@ -68,7 +68,7 @@ services:
       GIN_MODE: "debug" # For local development onlyAPP_
       APP_PORT: "8081"
       APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU="
-      APP_KAFKA_BROKERS: "kafka:9092" # For local development only
+      APP_KAFKA_BROKERS: "kafka:29092" # For local development only
       APP_KAFKA_TOPIC: "orders-placed"
       APP_PRIMARY_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
       APP_REPLICA_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
@@ -83,10 +83,10 @@ services:
     restart: unless-stopped
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 3
     environment:
       APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
-      APP_KAFKA_BROKERS: "kafka:9092" # For local development only
+      APP_KAFKA_BROKERS: "kafka:29092" # For local development only
       APP_KAFKA_TOPIC: "orders-placed"
       APP_KAFKA_DLQ_TOPIC: "orders-placed-dlq"
       APP_KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only

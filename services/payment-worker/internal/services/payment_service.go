@@ -45,29 +45,29 @@ func (p PaymentServiceImpl) ProcessPayment(ctx context.Context, paymentJob views
 		// validate idempotency key
 		idempotencyUUID, err := uuid.Parse(paymentJob.IdempotencyKey)
 		if err != nil {
-			p.logger.Error("failed to parse idempotency key", zap.Error(err))
-			p.updateOrderDbStatus(ctx, tx, idempotencyUUID, pkg.OrderStatusFailed, "failed to parse idempotency key, no retry possible")
+			_, dbErr := p.orderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyUUID, pkg.OrderStatusFailed, "failed to parse idempotency key, no retry possible")
+			p.logger.Error("failed to parse idempotency key", zap.Error(err), zap.Error(dbErr))
 			return errors.New("failed to parse idempotency key")
 		}
 
 		// Check if the transaction is fraudulent
 		isFraud := detectFraudTransaction(paymentJob.Amount)
 		if isFraud {
-			p.logger.Error("fraudulent transaction detected", zap.String("idempotency_key", paymentJob.IdempotencyKey))
-			p.updateOrderDbStatus(ctx, tx, idempotencyUUID, pkg.OrderStatusFailed, "fraudulent transaction detected, no retry possible")
+			_, dbErr := p.orderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyUUID, pkg.OrderStatusFailed, "fraudulent transaction detected, no retry possible")
+			p.logger.Error("fraudulent transaction detected", zap.String("idempotency_key", paymentJob.IdempotencyKey), zap.Error(dbErr))
 			return errors.New("fraudulent transaction detected")
 		}
 
 		// process transaction
 		err = p.processTransaction(idempotencyUUID)
 		if err != nil {
-			p.logger.Error("failed to process transaction", zap.String("idempotency_key", paymentJob.IdempotencyKey), zap.Error(err))
-			p.updateOrderDbStatus(ctx, tx, idempotencyUUID, pkg.OrderStatusFailed, "failed to process transaction, no retry possible")
+			dbErr := p.orderRepo.UpdateStatusIdempotencyError(ctx, tx, p.logger, idempotencyUUID)
+			p.logger.Error("failed to process transaction", zap.String("idempotency_key", paymentJob.IdempotencyKey), zap.Error(err), zap.Error(dbErr))
 			return err
 		}
 
-		p.logger.Info("payment processed successfully", zap.String("idempotency_key", paymentJob.IdempotencyKey))
-		p.updateOrderDbStatus(ctx, tx, idempotencyUUID, pkg.OrderStatusSuccess, "payment processed successfully")
+		_, dbErr := p.orderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyUUID, pkg.OrderStatusSuccess, "payment processed successfully")
+		p.logger.Info("payment processed successfully", zap.String("idempotency_key", paymentJob.IdempotencyKey), zap.Error(dbErr))
 		return nil
 	})
 	if err != nil {
@@ -96,10 +96,10 @@ func detectFraudTransaction(amount float64) bool {
 	return false
 }
 
-func (p PaymentServiceImpl) updateOrderDbStatus(ctx context.Context, tx pgx.Tx, idempotencyUUID uuid.UUID, orderStatus pkg.OrderStatus, message string) {
-	err := p.orderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyUUID, orderStatus, message)
-	if err != nil {
-		p.logger.Error("failed to update order status", zap.String("idempotency_key", idempotencyUUID.String()), zap.Error(err), zap.String("order_status", string(orderStatus)))
-	}
-	p.logger.Info("order status updated successfully", zap.String("idempotency_key", idempotencyUUID.String()), zap.String("order_status", string(orderStatus)))
-}
+//func (p PaymentServiceImpl) updateOrderDbStatus(ctx context.Context, tx pgx.Tx, idempotencyUUID uuid.UUID, orderStatus pkg.OrderStatus, message string) {
+//	err := p.orderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyUUID, orderStatus, message)
+//	if err != nil {
+//		p.logger.Error("failed to update order status", zap.String("idempotency_key", idempotencyUUID.String()), zap.Error(err), zap.String("order_status", string(orderStatus)))
+//	}
+//	p.logger.Info("order status updated successfully", zap.String("idempotency_key", idempotencyUUID.String()), zap.String("order_status", string(orderStatus)))
+//}
