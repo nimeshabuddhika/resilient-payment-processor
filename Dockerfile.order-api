@@ -1,6 +1,11 @@
-# Multi-stage build for a small, secure runtime image
+# Multi-stage build for order-api with Confluent Kafka (CGO)
 # Build stage
 FROM golang:1.25 AS builder
+
+# Install build deps for confluent-kafka-go (requires CGO and librdkafka)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config librdkafka-dev ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 # Leverage Go modules cache
@@ -10,14 +15,21 @@ RUN go mod download
 # Copy the whole repo to build with internal libs
 COPY . .
 
-# Build statically if possible for scratch/distroless
-ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    go build -ldflags="-s -w" -o /out/order-api ./services/order-api/cmd
+# Build with CGO enabled for confluent-kafka-go (build for native container arch)
+ENV CGO_ENABLED=1
+RUN go build -ldflags="-s -w" -o /out/order-api ./services/order-api/cmd
 
-# Runtime stage
-FROM gcr.io/distroless/base-debian12:nonroot
+# Runtime stage with librdkafka runtime libs
+FROM debian:12-slim
 WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates librdkafka1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -u 65532 -r -g nogroup -s /usr/sbin/nologin nonroot
 
 # Copy binary
 COPY --from=builder /out/order-api /app/order-api
@@ -25,7 +37,7 @@ COPY --from=builder /out/order-api /app/order-api
 # Expose service port (match config default or env)
 EXPOSE 8080
 
-# Non-root user provided by distroless:nonroot
-USER nonroot:nonroot
+# Run as non-root
+USER 65532:65532
 
 ENTRYPOINT ["/app/order-api"]
