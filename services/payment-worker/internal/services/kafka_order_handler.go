@@ -18,12 +18,14 @@ type KafkaOrderHandler interface {
 	Consume(ctx context.Context) func()
 }
 
+// KafkaOrderConfig holds configuration and dependencies for the Kafka order consumer.
 type KafkaOrderConfig struct {
 	Logger         *zap.Logger
 	Config         *configs.Config
 	consumer       *kafka.Consumer
 	PaymentService PaymentService
 	dlqProducer    *kafka.Producer
+	validate       *validator.Validate
 }
 
 // NewKafkaOrderConsumer creates and initializes a KafkaOrderHandler with the provided logger and configuration parameters.
@@ -50,10 +52,12 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 
 	cfg.consumer = kafkaConsumer
 	cfg.dlqProducer = dlqProducer
+	cfg.validate = validator.New()
 	return &cfg
 }
 
-func (k KafkaOrderConfig) Consume(ctx context.Context) func() {
+// Consume starts the message consumption loop and returns a closure to gracefully stop resources.
+func (k *KafkaOrderConfig) Consume(ctx context.Context) func() {
 	err := k.consumer.SubscribeTopics([]string{k.Config.KafkaTopic}, nil)
 	if err != nil {
 		k.Logger.Fatal("failed to subscribe", zap.Error(err))
@@ -86,7 +90,7 @@ func (k KafkaOrderConfig) Consume(ctx context.Context) func() {
 	}
 }
 
-func (k KafkaOrderConfig) processMessage(ctx context.Context, msg *kafka.Message) {
+func (k *KafkaOrderConfig) processMessage(ctx context.Context, msg *kafka.Message) {
 	select {
 	case <-ctx.Done():
 		return
@@ -104,8 +108,7 @@ func (k KafkaOrderConfig) processMessage(ctx context.Context, msg *kafka.Message
 	}
 
 	// Validate after unmarshal
-	validate := validator.New()
-	if err := validate.Struct(&paymentJob); err != nil {
+	if err := k.validate.Struct(&paymentJob); err != nil {
 		k.Logger.Error("failed to validate message", zap.Error(err))
 		k.sendToDLQ(ctx, msg, "validate error", err.Error())
 		// commit to skip this bad message
@@ -134,7 +137,8 @@ func (k KafkaOrderConfig) processMessage(ctx context.Context, msg *kafka.Message
 	k.Logger.Info("payment processed successfully", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey))
 }
 
-func (k KafkaOrderConfig) sendToDLQ(_ context.Context, original *kafka.Message, reason, errMsg string) {
+// sendToDLQ publishes the original message with error context to the configured DLQ topic.
+func (k *KafkaOrderConfig) sendToDLQ(_ context.Context, original *kafka.Message, reason, errMsg string) {
 	if k.dlqProducer == nil {
 		k.Logger.Error("DLQ producer not initialized; dropping message", zap.String("reason", reason))
 		return

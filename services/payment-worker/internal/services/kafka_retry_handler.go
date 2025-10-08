@@ -9,10 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// KafkaRetryHandler defines the interface for retrying failed payment jobs.
 type KafkaRetryHandler interface {
 	Start(ctx context.Context)
 }
 
+// KafkaRetryConfig contains dependencies and configuration for the retry handler.
 type KafkaRetryConfig struct {
 	Context   context.Context
 	Logger    *zap.Logger
@@ -20,10 +22,12 @@ type KafkaRetryConfig struct {
 	RetryChan chan views.PaymentJob
 }
 
+// NewKafkaRetryHandler constructs a KafkaRetryHandler with the given configuration.
 func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
 	return &cfg
 }
 
+// Start begins listening on the retry channel and logs retry attempts.
 func (k KafkaRetryConfig) Start(ctx context.Context) {
 	k.Logger.Info("starting retry handler")
 

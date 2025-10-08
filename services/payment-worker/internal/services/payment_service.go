@@ -19,15 +19,31 @@ import (
 	"go.uber.org/zap"
 )
 
+// PaymentService processes incoming payment jobs end-to-end.
 type PaymentService interface {
 	HandlePayment(ctx context.Context, paymentJob views.PaymentJob) error
 }
 
+// Domain-level tuning constants and shared errors for the payment service.
+const (
+	TransactionProcessingDelay = 5 * time.Second
+	RandomFailureDivisor       = 4
+	NetworkIssueModulo         = 10
+)
+
+var (
+	ErrInsufficientBalance   = errors.New("insufficient balance")
+	ErrFraudAnalysisFailed   = errors.New("fraud analysis failed")
+	ErrSuspiciousTransaction = errors.New("suspicious transaction")
+)
+
+// TransactionStatus represents the outcome of a transaction attempt.
 type TransactionStatus struct {
 	EligibleForRetry bool
 	Err              error
 }
 
+// PaymentServiceConfig groups all dependencies required by the payment service.
 type PaymentServiceConfig struct {
 	Logger        *zap.Logger
 	Config        *configs.Config
@@ -41,13 +57,20 @@ type PaymentServiceConfig struct {
 	RetryChan     chan<- views.PaymentJob
 }
 
+// NewPaymentService constructs a PaymentService with the given configuration.
 func NewPaymentService(conf PaymentServiceConfig) PaymentService {
 	return &conf
 }
 
-func (p PaymentServiceConfig) HandlePayment(ctx context.Context, job views.PaymentJob) error {
+// HandlePayment orchestrates the end-to-end payment flow for a single job.
+// It performs decryption, fraud analysis, transaction processing, and state updates.
+func (p *PaymentServiceConfig) HandlePayment(ctx context.Context, job views.PaymentJob) error {
 	// Begin transaction
 	tx, err := p.DB.Begin(ctx)
+	if err != nil {
+		p.Logger.Error("failed to begin transaction", zap.Error(err))
+		return err
+	}
 	defer func() {
 		transErr := p.DB.Commit(ctx, tx)
 		p.Logger.Info("transaction committed", zap.Error(transErr))
@@ -67,7 +90,7 @@ func (p PaymentServiceConfig) HandlePayment(ctx context.Context, job views.Payme
 	fraudStatusChan := make(chan FraudStatus, 1)
 	go p.FraudDetector.Analyze(ctx, &fraudWG, fraudStatusChan, transactionAmount, job)
 
-	// Acquire redis lock with pending balance
+	// Acquire redis lock for balance holds
 
 	// Check if balance is enough to process transaction
 
@@ -126,7 +149,8 @@ func (p PaymentServiceConfig) HandlePayment(ctx context.Context, job views.Payme
 	return nil
 }
 
-func (p PaymentServiceConfig) handlePaymentStatus(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transStatus TransactionStatus) error {
+// handlePaymentStatus updates the order and retry flow based on transaction outcome.
+func (p *PaymentServiceConfig) handlePaymentStatus(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transStatus TransactionStatus) error {
 	// handle success payment
 	if transStatus.Err == nil {
 		return nil
@@ -144,8 +168,8 @@ func (p PaymentServiceConfig) handlePaymentStatus(ctx context.Context, tx pgx.Tx
 	return transStatus.Err
 }
 
-// checkAccountBalance checks if the account balance is sufficient to process the transaction
-func (p PaymentServiceConfig) checkAccountBalance(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transactionAmount float64) (models.Account, float64, error) {
+// checkAccountBalance ensures the account has sufficient funds for the transaction.
+func (p *PaymentServiceConfig) checkAccountBalance(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transactionAmount float64) (models.Account, float64, error) {
 	var account models.Account
 	var accountBalance float64
 	var err error
@@ -163,12 +187,13 @@ func (p PaymentServiceConfig) checkAccountBalance(ctx context.Context, tx pgx.Tx
 	if (accountBalance - transactionAmount) < 0 {
 		p.Logger.Error("insufficient balance", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("account_balance", accountBalance), zap.Any("transaction_amount", transactionAmount))
 		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "insufficient balance")
-		return models.Account{}, 0, errors.New("insufficient balance")
+		return models.Account{}, 0, ErrInsufficientBalance
 	}
 	return account, accountBalance, nil
 }
 
-func (p PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob views.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
+// handleFraudReport routes the payment for retry or failure based on the fraud analysis report.
+func (p *PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob views.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
 	if fraudStatus.FraudFlag == FraudFlagClean {
 		return nil
 	}
@@ -179,16 +204,16 @@ func (p PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob 
 		// send to retry channel
 		p.RetryChan <- paymentJob
 
-		return errors.New("fraud analysis failed")
+		return ErrFraudAnalysisFailed
 	}
 
 	p.Logger.Error("suspicious transaction", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
 	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "suspicious transaction, no retry possible")
-	return errors.New("suspicious transaction")
+	return ErrSuspiciousTransaction
 }
 
-// updateOrderDbStatus is a helper function to update order status in the database
-func (p PaymentServiceConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
+// updateOrderStatus updates the order status in the database and logs the outcome.
+func (p *PaymentServiceConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
 	err := p.OrderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyKey, status, message)
 	if err != nil {
 		p.Logger.Error("failed to update order status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status))
@@ -197,7 +222,8 @@ func (p PaymentServiceConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, 
 	p.Logger.Info("order status updated successfully", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Any("order_status", status))
 }
 
-func (p PaymentServiceConfig) processTransaction(ctx context.Context, paymentWG *sync.WaitGroup, statusChan chan TransactionStatus, _ float64, paymentJob views.PaymentJob) {
+// processTransaction simulates the actual payment processing and reports status.
+func (p *PaymentServiceConfig) processTransaction(ctx context.Context, paymentWG *sync.WaitGroup, statusChan chan TransactionStatus, _ float64, paymentJob views.PaymentJob) {
 	defer paymentWG.Done()
 
 	// simulate processing time with context cancellation support
@@ -205,19 +231,19 @@ func (p PaymentServiceConfig) processTransaction(ctx context.Context, paymentWG 
 	case <-ctx.Done():
 		statusChan <- TransactionStatus{EligibleForRetry: true, Err: ctx.Err()}
 		return
-	case <-time.After(5 * time.Second):
+	case <-time.After(TransactionProcessingDelay):
 		// continue processing
 	}
 
 	// simulate random failure
-	if int32(paymentJob.IdempotencyKey.ID()%4) == 0 {
+	if int32(paymentJob.IdempotencyKey.ID()%RandomFailureDivisor) == 0 {
 		p.Logger.Error("transaction failed, no retry attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey))
 		statusChan <- TransactionStatus{EligibleForRetry: false, Err: errors.New("transaction failed due to simulated account issue")}
 		return
 	}
 
 	// simulate 10 minute network issue
-	if time.Now().Minute()%10 == 0 {
+	if time.Now().Minute()%NetworkIssueModulo == 0 {
 		p.Logger.Error("transaction failed, retry attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey))
 		statusChan <- TransactionStatus{EligibleForRetry: true, Err: errors.New("transaction failed due to simulated network traffic")}
 		return
