@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"strings"
 	"time"
@@ -71,7 +72,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg Config) (*DB, func(), erro
 }
 
 func newPool(ctx context.Context, logger *zap.Logger, dsn string, maxConns, minConns int32) (*pgxpool.Pool, error) {
-	config, err := pgxpool.ParseConfig("postgres://" + dsn)
+	dsn = fmt.Sprintf("postgres://%s", dsn)
+	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}

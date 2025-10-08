@@ -7,4 +7,5 @@ KAFKA_DLQ_TOPIC: "orders-placed-dlq"
 KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
 PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
 REDIS_ADDR: "localhost:6379"
+ORDER_RETRY_THRESHOLD: "3"
 

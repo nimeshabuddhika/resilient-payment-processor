@@ -51,7 +51,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		UserID:         userId,
 		AccountID:      req.AccountID,
 		IdempotencyKey: req.IdempotencyID,
-		Amount:         req.Amount,
+		Currency:       req.Currency,
 		Status:         pkg.OrderStatusPending,
 		CreatedAt:      time.Now().UTC(),
 		UpdatedAt:      time.Now().UTC(),
@@ -94,6 +94,14 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 			return pkg.NewAppError(pkg.ErrInsufficientFundsCode, "insufficient balance", pkg.ErrInsufficientBalance)
 		}
 
+		//encrypt transaction amount
+		encAmount, err := utils.EncryptAES(utils.Float64ToByte(req.Amount), s.aesKey)
+		if err != nil {
+			s.logger.Error("failed to encrypt transaction amount", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			return pkg.NewAppError(pkg.ErrServerCode, "encryption failed", err)
+		}
+		order.Amount = encAmount
+
 		// Create order
 		_, err = s.orderRepo.Create(ctx, tx, order)
 		if err != nil {
@@ -107,7 +115,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 
 	paymentJob := order.ToPaymentJob()
 	// Publish after commit
-	if err = s.kafkaPublisher.PublishOrder(userId, paymentJob); err != nil {
+	if err = s.kafkaPublisher.PublishOrder(paymentJob); err != nil {
 		s.logger.Error("failed to publish order", zap.String(pkg.TraceId, traceId), zap.Error(err))
 		// TODO: Enqueue for retry or DLQ; don't fail API
 	}

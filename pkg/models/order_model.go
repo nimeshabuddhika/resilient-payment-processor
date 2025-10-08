@@ -14,7 +14,8 @@ type Order struct {
 	UserID         uuid.UUID
 	AccountID      uuid.UUID
 	IdempotencyKey uuid.UUID
-	Amount         float64
+	Amount         string
+	Currency       string
 	Status         pkg.OrderStatus
 	Message        string
 	CreatedAt      time.Time
@@ -23,12 +24,11 @@ type Order struct {
 
 func (o Order) ToPaymentJob() views.PaymentJob {
 	return views.PaymentJob{
-		ID:             o.ID.String(),
-		UserID:         o.UserID.String(),
-		AccountID:      o.AccountID.String(),
-		IdempotencyKey: o.IdempotencyKey.String(),
+		ID:             o.ID,
+		UserID:         o.UserID,
+		AccountID:      o.AccountID,
+		IdempotencyKey: o.IdempotencyKey,
 		Amount:         o.Amount,
-		Status:         o.Status,
 		CreatedAt:      o.CreatedAt,
 		UpdatedAt:      o.UpdatedAt,
 	}

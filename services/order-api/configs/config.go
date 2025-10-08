@@ -56,7 +56,5 @@ func Load(logger *zap.Logger) (*Config, error) {
 		return nil, err
 	}
 
-	logger.Warn("Configuration loaded successfully", zap.Any("config", cfg)) // TODO : Delete after testing
-
 	return &cfg, nil
 }

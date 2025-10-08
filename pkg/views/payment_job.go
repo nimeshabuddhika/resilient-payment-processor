@@ -3,17 +3,16 @@ package views
 import (
 	"time"
 
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
+	"github.com/google/uuid"
 )
 
 type PaymentJob struct {
-	ID             string          `json:"id"`
-	UserID         string          `json:"userId"`
-	AccountID      string          `json:"accountId"`
-	IdempotencyKey string          `json:"idempotencyKey"`
-	Amount         float64         `json:"amount"`
-	Status         pkg.OrderStatus `json:"status"`
-	RetryCount     int             `json:"retryCount"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
+	ID             uuid.UUID `json:"id" validate:"required,uuid"`
+	UserID         uuid.UUID `json:"userId" validate:"required,uuid"`
+	AccountID      uuid.UUID `json:"accountId" validate:"required,uuid"`
+	IdempotencyKey uuid.UUID `json:"idempotencyKey" validate:"required,uuid"`
+	Amount         string    `json:"amount" validate:"required"`
+	RetryCount     int       `json:"retryCount" validate:"min=0"`
+	CreatedAt      time.Time `json:"createdAt" validate:"required"`
+	UpdatedAt      time.Time `json:"updatedAt" validate:"required"`
 }

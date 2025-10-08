@@ -44,7 +44,7 @@ func ToFloat64(s string) (float64, error) {
 	return strconv.ParseFloat(s, 64)
 }
 
-// BalanceToByte converts a balance to a byte array.
-func BalanceToByte(bal float64) []byte {
+// Float64ToByte converts a float64 to a byte array.
+func Float64ToByte(bal float64) []byte {
 	return []byte(fmt.Sprintf("%.2f", bal))
 }

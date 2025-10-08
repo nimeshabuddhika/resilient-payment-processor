@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
-	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	"go.uber.org/zap"
 )
 
 type KafkaPublisher interface {
-	PublishOrder(userUUID uuid.UUID, paymentJob views.PaymentJob) error
+	PublishOrder(paymentJob views.PaymentJob) error
 	Close()
 }
 
@@ -41,7 +40,7 @@ func NewKafkaPublisher(logger *zap.Logger, cnf *configs.Config) KafkaPublisher {
 	}
 }
 
-func (k KafkaPublisherImpl) PublishOrder(userUUID uuid.UUID, paymentJob views.PaymentJob) error {
+func (k KafkaPublisherImpl) PublishOrder(paymentJob views.PaymentJob) error {
 	// Serialize the order payload to JSON for Kafka transport
 	msgBytes, err := json.Marshal(paymentJob)
 	if err != nil {
@@ -49,7 +48,7 @@ func (k KafkaPublisherImpl) PublishOrder(userUUID uuid.UUID, paymentJob views.Pa
 	}
 
 	// Deterministic partitioning by user ID to balanced load
-	partition := int32(userUUID.ID() % k.cnf.KafkaPartition)
+	partition := int32(paymentJob.UserID.ID() % k.cnf.KafkaPartition)
 
 	// Produce the message asynchronously; delivery results are handled by handleDeliveryReports
 	return k.producer.Produce(&kafka.Message{
@@ -57,8 +56,8 @@ func (k KafkaPublisherImpl) PublishOrder(userUUID uuid.UUID, paymentJob views.Pa
 			Topic:     &k.cnf.KafkaTopic,
 			Partition: partition, // target partition for ordering/affinity
 		},
-		Key:   []byte(paymentJob.IdempotencyKey), // key for idempotency and partitioning semantics
-		Value: msgBytes,                          // serialized order payload
+		Key:   paymentJob.IdempotencyKey[:], // key for idempotency and partitioning semantics
+		Value: msgBytes,                     // serialized order payload
 	}, nil)
 }
 

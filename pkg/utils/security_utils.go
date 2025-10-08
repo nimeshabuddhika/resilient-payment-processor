@@ -71,6 +71,11 @@ func DecodeString(value string) ([]byte, error) {
 	return key, nil
 }
 
-func EncodeString(value string) string {
-	return base64.StdEncoding.EncodeToString([]byte(value))
+// DecryptToFloat64 decrypts a string to a float64.
+func DecryptToFloat64(value string, key []byte) (float64, error) {
+	decryptStr, err := DecryptAES(value, key)
+	if err != nil {
+		return 0, err
+	}
+	return ToFloat64(decryptStr)
 }

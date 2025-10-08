@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
-	"go.uber.org/zap"
 )
 
 type OrderRepository interface {
@@ -21,8 +20,7 @@ type OrderRepository interface {
 	CreateAiDataset(ctx context.Context, tx pgx.Tx, order models.Order, isFraud bool) (pgconn.CommandTag, error)
 	FindByIdempotencyKey(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID) (bool, error)
 	// UpdateStatusIdempotencyID updates the status of an order by idempotency key.
-	UpdateStatusIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (pgconn.CommandTag, error)
-	UpdateStatusIdempotencyError(ctx context.Context, tx pgx.Tx, logger *zap.Logger, idempotencyID uuid.UUID) error
+	UpdateStatusIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) error
 }
 type OrderRepositoryImpl struct {
 }
@@ -73,18 +71,8 @@ func (o OrderRepositoryImpl) FindByIdempotencyKey(ctx context.Context, tx pgx.Tx
 	return exists, err
 }
 
-func (o OrderRepositoryImpl) UpdateStatusIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (pgconn.CommandTag, error) {
-	affectedRows, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4`,
-		status, message, time.Now(), idempotencyID)
-	return affectedRows, err
-}
-
-func (o OrderRepositoryImpl) UpdateStatusIdempotencyError(ctx context.Context, tx pgx.Tx, logger *zap.Logger, idempotencyID uuid.UUID) error {
-	logger.Error("******************************** Error Status ********************************", zap.String("idempotency_key", idempotencyID.String()))
-	status := pkg.OrderStatusFailed
-	message := "failed to process transaction, no retry possible"
+func (o OrderRepositoryImpl) UpdateStatusIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) error {
 	_, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4`,
 		status, message, time.Now(), idempotencyID)
-	logger.Error("------------------------- Error Status -------------------------", zap.String("idempotency_key", idempotencyID.String()), zap.Error(err))
 	return err
 }

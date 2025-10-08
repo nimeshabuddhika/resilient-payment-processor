@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Config holds application configuration for payment-worker.
 type Config struct {
 	KafkaBrokers        string `mapstructure:"KAFKA_BROKERS" validate:"required"`
 	PrimaryDbAddr       string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
@@ -22,6 +23,7 @@ type Config struct {
 	AesKey              string `mapstructure:"AES_KEY" validate:"required"`
 	RedisAddr           string `mapstructure:"REDIS_ADDR" validate:"required"`
 	MaxReplicaRateLimit int    `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
+	OrderRetryThreshold int    `mapstructure:"ORDER_RETRY_THRESHOLD" validate:"min=1,max=5"`
 }
 
 func Load(logger *zap.Logger) (*Config, error) {
@@ -34,6 +36,7 @@ func Load(logger *zap.Logger) (*Config, error) {
 	viper.SetDefault("KAFKA_RETRY", "3")
 	viper.SetDefault("KAFKA_PARTITION", "4")
 	viper.SetDefault("MAX_REPLICA_RATE_LIMIT", "10")
+	viper.SetDefault("ORDER_RETRY_THRESHOLD", "1")
 
 	// Optional: Read from config.yaml if exists
 	if gin.ReleaseMode == gin.Mode() {
@@ -58,8 +61,6 @@ func Load(logger *zap.Logger) (*Config, error) {
 	if err := validate.Struct(&cfg); err != nil {
 		return nil, err
 	}
-
-	logger.Warn("Configuration loaded successfully", zap.Any("config", cfg)) // TODO : Delete after testing
 
 	return &cfg, nil
 }

@@ -10,11 +10,14 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/cache"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/internal/services"
 	"go.uber.org/zap"
 )
 
+// main function to start the payment-worker service
 func main() {
 	// Initialize logger
 	pkg.InitLogger()
@@ -52,13 +55,47 @@ func main() {
 	}
 	logger.Info("redis client initialized successfully")
 
-	// Initialize payment service. account and order repo
+	// Initialize payment service dependencies
+	aesKey, err := utils.DecodeString(cfg.AesKey)
+	if err != nil {
+		logger.Fatal("failed to decode AES key", zap.Error(err))
+	}
 	accountRepo := repositories.NewAccountRepository()
 	orderRepo := repositories.NewOrderRepository()
-	paymentService := services.NewPaymentService(logger, cfg, accountRepo, orderRepo, db, redisClient)
+	userRepo := repositories.NewUserRepository()
+	fraudDetectionService := services.NewFraudDetectionService(services.FraudDetectionConf{
+		Logger: logger,
+		Cnf:    cfg,
+	})
+
+	// Initialize kafka retry handler
+	retryChannel := make(chan views.PaymentJob)
+	kafkaRetryHandler := services.NewKafkaRetryHandler(services.KafkaRetryConf{
+		Logger:       logger,
+		Cnf:          cfg,
+		RetryChannel: retryChannel,
+	})
+	kafkaRetryHandler.InitializeRetryChannel(ctx)
+
+	paymentService := services.NewPaymentService(services.PaymentServiceConf{
+		Logger:       logger,
+		Cnf:          cfg,
+		AccountRepo:  accountRepo,
+		OrderRepo:    orderRepo,
+		UserRepo:     userRepo,
+		Db:           db,
+		RedisClient:  redisClient,
+		FraudService: fraudDetectionService,
+		AesKey:       aesKey,
+		RetryChannel: retryChannel,
+	})
 
 	// Initialize kafka consumer
-	kafkaConsumer := services.NewKafkaConsumer(logger, cfg, paymentService)
+	kafkaConsumer := services.NewKafkaConsumer(services.KafkaOrderConf{
+		Logger:         logger,
+		Cnf:            cfg,
+		PaymentService: paymentService,
+	})
 	closeConsumer := kafkaConsumer.Consume(ctx)
 
 	// Handle shutdown signals (SIGINT, SIGTERM) for a K8s pod termination grace period
@@ -66,6 +103,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	<-quit
-	closeConsumer()
-	redisCloser()
+	closeConsumer()     //Close kafka order consumer
+	redisCloser()       // Close redis client
+	close(retryChannel) // Close retry channel to stop retry handler
 }

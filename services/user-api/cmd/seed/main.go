@@ -102,7 +102,7 @@ func main() {
 			for i := 1; i <= noOfAccounts; i++ {
 				// Create accounts with a random balance
 				bal := *minAccountBalance + rand.Float64()*(*maxAccountBalance-*minAccountBalance)
-				balEnc, err := utils.EncryptAES(utils.BalanceToByte(bal), key)
+				balEnc, err := utils.EncryptAES(utils.Float64ToByte(bal), key)
 				if err != nil {
 					return err
 				}
@@ -130,11 +130,17 @@ func main() {
 					}
 					logger.Info("Creating order", zap.Any("userId", userID), zap.Any("accountId", accID), zap.Float64("amt", amt), zap.Bool("isFraud", isFraud))
 
-					_, err := orderRepo.CreateAiDataset(ctx, tx, models.Order{
+					//encrypt amount
+					amtEnc, err := utils.EncryptAES(utils.Float64ToByte(amt), key)
+					if err != nil {
+						return err
+					}
+					_, err = orderRepo.CreateAiDataset(ctx, tx, models.Order{
 						UserID:         userID,
 						AccountID:      accID,
 						IdempotencyKey: uuid.New(),
-						Amount:         amt,
+						Amount:         amtEnc,
+						Currency:       "CAD",
 						Status:         pkg.OrderStatusPending,
 						CreatedAt:      time.Now(),
 						UpdatedAt:      time.Now(),
