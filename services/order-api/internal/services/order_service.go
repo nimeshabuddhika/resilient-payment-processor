@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,10 +64,12 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 			return pkg.HandleSQLError(traceId, s.logger, err)
 		}
 		if exists {
-			s.logger.Warn("Idempotency key already exists", zap.String("idempotencyKey", req.IdempotencyID.String()))
-			return nil // Idempotent: success without action
+			s.logger.Warn("idempotency key already exists",
+				zap.String(pkg.TraceId, traceId),
+				zap.String("idempotencyKey", req.IdempotencyID.String()))
+			return pkg.NewAppError(pkg.ErrInvalidInputCode, "idempotency key already exists", nil)
 		}
-		// Validate balance
+		// Get account
 		account, err := s.accountRepo.FindById(ctx, tx, req.AccountID)
 		if err != nil {
 			return pkg.HandleSQLError(traceId, s.logger, err)
@@ -77,19 +78,20 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		// decrypt balance
 		accountBalanceStr, err := utils.DecryptAES(account.Balance, s.aesKey) // TODO: use a key manager or call user-api to get the balance
 		if err != nil {
-			s.logger.Error("Failed to decrypt balance", zap.String(pkg.TraceId, traceId), zap.Error(err))
-			return err
+			s.logger.Error("failed to decrypt balance", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			return pkg.NewAppError(pkg.ErrServerCode, "decryption failed", err)
 		}
 		// convert `accountBalanceStr` to float64
 		accountBalance, err := utils.ToFloat64(accountBalanceStr)
 		if err != nil {
-			s.logger.Error("Failed to convert balance to float64", zap.String(pkg.TraceId, traceId), zap.Error(err))
-			return err
+			s.logger.Error("failed to convert balance to float64", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			return pkg.NewAppError(pkg.ErrServerCode, "parse failed", err)
 		}
 
 		// Check balance
 		if accountBalance < req.Amount {
-			return fmt.Errorf("insufficient balance: %d < %d", account.Balance, req.Amount)
+			s.logger.Warn("insufficient balance", zap.String(pkg.TraceId, traceId))
+			return pkg.NewAppError(pkg.ErrServerCode, "insufficient balance", pkg.ErrInsufficientBalance)
 		}
 
 		// Create order
@@ -106,9 +108,9 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 	paymentJob := order.ToPaymentJob()
 	// Publish after commit
 	if err = s.kafkaPublisher.PublishOrder(userId, paymentJob); err != nil {
-		s.logger.Error("Failed to publish order", zap.String(pkg.TraceId, traceId), zap.Error(err))
+		s.logger.Error("failed to publish order", zap.String(pkg.TraceId, traceId), zap.Error(err))
 		// TODO: Enqueue for retry or DLQ; don't fail API
 	}
-	s.logger.Info("Order created successfully", zap.String(pkg.TraceId, traceId), zap.String("orderId", order.ID.String()))
+	s.logger.Info("order created successfully", zap.String(pkg.TraceId, traceId), zap.String("orderId", order.ID.String()))
 	return order.ID.String(), nil
 }

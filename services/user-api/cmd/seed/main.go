@@ -102,7 +102,7 @@ func main() {
 			for i := 1; i <= noOfAccounts; i++ {
 				// Create accounts with a random balance
 				bal := *minAccountBalance + rand.Float64()*(*maxAccountBalance-*minAccountBalance)
-				balEnc, err := utils.EncryptAES([]byte(fmt.Sprintf("%.2f", bal)), key)
+				balEnc, err := utils.EncryptAES(utils.BalanceToByte(bal), key)
 				if err != nil {
 					return err
 				}
@@ -135,7 +135,7 @@ func main() {
 						AccountID:      accID,
 						IdempotencyKey: uuid.New(),
 						Amount:         amt,
-						Status:         models.OrderStatusPending,
+						Status:         pkg.OrderStatusPending,
 						CreatedAt:      time.Now(),
 						UpdatedAt:      time.Now(),
 					}, isFraud)

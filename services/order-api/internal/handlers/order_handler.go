@@ -29,37 +29,29 @@ func (h *OrderHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	traceID, err := utils.GetTraceID(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
-			Code:    pkg.ERRServerError,
-			Message: err.Error(),
-		})
+		httpErr := pkg.NewAppResponseMsg(pkg.ErrServerCode, "failed to retrieve trace id")
+		c.JSON(httpErr.Status, httpErr)
 		return
 	}
 	userIdStr := c.GetHeader("userId") // TODO : User Id should be retrieve from JWT Authorization header. This is for demo purpose only.
 	userUUID, err := uuid.Parse(userIdStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
-			Code:    pkg.ERRServerError,
-			Message: "failed to parse user UUID from header",
-		})
+		httpErr := pkg.NewAppResponseMsg(pkg.ErrInvalidInputCode, "failed to parse user UUID from header")
+		c.JSON(httpErr.Status, httpErr)
+		return
 	}
 
 	var req views.OrderRequest
 	if err = c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, pkg.ErrorResponse{
-			Code:    pkg.ErrInvalidInput,
-			Message: "invalid request body",
-			Details: err.Error(),
-		})
+		httpErr := pkg.NewAppResponse(pkg.ErrInvalidInputCode)
+		c.JSON(httpErr.Status, httpErr)
 		return
 	}
 
 	orderID, err := h.service.CreateOrder(c.Request.Context(), traceID, userUUID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, pkg.ErrorResponse{
-			Code:    pkg.ERRServerError,
-			Message: err.Error(),
-		})
+		httpErr := pkg.NewAppResponseError(err)
+		c.JSON(httpErr.Status, httpErr)
 		return
 	}
 

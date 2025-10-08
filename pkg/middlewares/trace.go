@@ -1,9 +1,6 @@
 package middleware
 
 import (
-	"fmt"
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
@@ -17,19 +14,15 @@ func TraceID(logger *zap.Logger) gin.HandlerFunc {
 		requestIDStr := c.Request.Header.Get(pkg.HeaderRequestId)
 		if utils.IsEmpty(requestIDStr) {
 			logger.Error("request ID is missing in header", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
-			c.AbortWithStatusJSON(http.StatusBadRequest, pkg.ErrorResponse{
-				Code:    pkg.ErrInvalidInput,
-				Message: fmt.Sprintf("request ID is missing in header %s", pkg.HeaderRequestId),
-			})
+			httpErr := pkg.NewAppResponseMsg(pkg.ErrInvalidInputCode, "request ID is missing in header")
+			c.AbortWithStatusJSON(httpErr.Status, httpErr)
 			return
 		}
 		_, err := uuid.Parse(requestIDStr)
 		if err != nil {
 			logger.Error("failed to parse request ID", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
-			c.AbortWithStatusJSON(http.StatusBadRequest, pkg.ErrorResponse{
-				Code:    pkg.ErrInvalidInput,
-				Message: fmt.Sprintf("failed to parse request ID %s", requestIDStr),
-			})
+			httpErr := pkg.NewAppResponseMsg(pkg.ErrInvalidInputCode, "failed to parse request ID")
+			c.AbortWithStatusJSON(httpErr.Status, httpErr)
 			return
 		}
 		traceID := c.Request.Header.Get(pkg.HeaderTraceId)
