@@ -14,14 +14,14 @@ func TraceID(logger *zap.Logger) gin.HandlerFunc {
 		requestIDStr := c.Request.Header.Get(pkg.HeaderRequestId)
 		if utils.IsEmpty(requestIDStr) {
 			logger.Error("request ID is missing in header", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
-			httpErr := pkg.NewAppResponseMsg(pkg.ErrInvalidInputCode, "request ID is missing in header")
+			httpErr := pkg.ToErrorResponse(logger, "", pkg.NewAppError(pkg.ErrInvalidInputCode, "request ID is missing in header", nil))
 			c.AbortWithStatusJSON(httpErr.Status, httpErr)
 			return
 		}
 		_, err := uuid.Parse(requestIDStr)
 		if err != nil {
 			logger.Error("failed to parse request ID", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
-			httpErr := pkg.NewAppResponseMsg(pkg.ErrInvalidInputCode, "failed to parse request ID")
+			httpErr := pkg.ToErrorResponse(logger, "", pkg.NewAppError(pkg.ErrInvalidInputCode, "failed to parse request ID", nil))
 			c.AbortWithStatusJSON(httpErr.Status, httpErr)
 			return
 		}

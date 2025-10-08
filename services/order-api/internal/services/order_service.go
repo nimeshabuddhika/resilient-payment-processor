@@ -67,7 +67,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 			s.logger.Warn("idempotency key already exists",
 				zap.String(pkg.TraceId, traceId),
 				zap.String("idempotencyKey", req.IdempotencyID.String()))
-			return pkg.NewAppError(pkg.ErrInvalidInputCode, "idempotency key already exists", nil)
+			return pkg.NewAppError(pkg.ErrIdempotencyConflictCode, "idempotency key already exists", nil)
 		}
 		// Get account
 		account, err := s.accountRepo.FindById(ctx, tx, req.AccountID)
@@ -91,7 +91,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		// Check balance
 		if accountBalance < req.Amount {
 			s.logger.Warn("insufficient balance", zap.String(pkg.TraceId, traceId))
-			return pkg.NewAppError(pkg.ErrServerCode, "insufficient balance", pkg.ErrInsufficientBalance)
+			return pkg.NewAppError(pkg.ErrInsufficientFundsCode, "insufficient balance", pkg.ErrInsufficientBalance)
 		}
 
 		// Create order
