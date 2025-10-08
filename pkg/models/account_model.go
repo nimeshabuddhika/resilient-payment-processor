@@ -14,4 +14,7 @@ type Account struct {
 	Currency  string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+
+	// Associations
+	Orders []Order
 }

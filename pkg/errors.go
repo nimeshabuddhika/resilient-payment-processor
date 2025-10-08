@@ -110,7 +110,7 @@ func ToErrorResponse(logger *zap.Logger, traceID string, err error) ErrorRespons
 func HandleSQLError(traceId string, logger *zap.Logger, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.Is(err, pgx.ErrNoRows) {
-		logger.Error("sql error : no records found", zap.String(TraceId, traceId))
+		logger.Warn("sql error : no records found", zap.String(TraceId, traceId))
 		return NewAppError(ErrRecordNotFoundCode, "no records found", err)
 	}
 	if !errors.As(err, &pgErr) {

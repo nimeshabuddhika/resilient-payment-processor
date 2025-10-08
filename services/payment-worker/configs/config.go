@@ -9,14 +9,19 @@ import (
 )
 
 type Config struct {
-	KafkaBrokers   string `mapstructure:"KAFKA_BROKERS" validate:"required"`
-	PrimaryDbAddr  string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
-	ReplicaDbAddr  string `mapstructure:"REPLICA_DB_ADDR"`
-	MaxDbCons      int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
-	MinDbCons      int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
-	KafkaRetry     int    `mapstructure:"KAFKA_RETRY" validate:"min=1"`
-	KafkaPartition uint32 `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
-	AesKey         string `mapstructure:"AES_KEY" validate:"required"`
+	KafkaBrokers        string `mapstructure:"KAFKA_BROKERS" validate:"required"`
+	PrimaryDbAddr       string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
+	ReplicaDbAddr       string `mapstructure:"REPLICA_DB_ADDR"`
+	MaxDbCons           int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
+	MinDbCons           int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
+	KafkaRetry          int    `mapstructure:"KAFKA_RETRY" validate:"min=1"`
+	KafkaPartition      uint32 `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
+	KafkaTopic          string `mapstructure:"KAFKA_TOPIC" validate:"required"`
+	KafkaDLQTopic       string `mapstructure:"KAFKA_DLQ_TOPIC" validate:"required"`
+	KafkaConsumerGroup  string `mapstructure:"KAFKA_CONSUMER_GROUP" validate:"required"`
+	AesKey              string `mapstructure:"AES_KEY" validate:"required"`
+	RedisAddr           string `mapstructure:"REDIS_ADDR" validate:"required"`
+	MaxReplicaRateLimit int    `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
 }
 
 func Load(logger *zap.Logger) (*Config, error) {
@@ -28,6 +33,7 @@ func Load(logger *zap.Logger) (*Config, error) {
 	viper.SetDefault("MIN_DB_CONNECTIONS", "2")
 	viper.SetDefault("KAFKA_RETRY", "3")
 	viper.SetDefault("KAFKA_PARTITION", "4")
+	viper.SetDefault("MAX_REPLICA_RATE_LIMIT", "10")
 
 	// Optional: Read from config.yaml if exists
 	if gin.ReleaseMode == gin.Mode() {

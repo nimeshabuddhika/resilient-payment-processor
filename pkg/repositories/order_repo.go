@@ -3,10 +3,12 @@ package repositories
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
 )
 
@@ -17,6 +19,8 @@ type OrderRepository interface {
 	// This is used for training the AI model.
 	CreateAiDataset(ctx context.Context, tx pgx.Tx, order models.Order, isFraud bool) (pgconn.CommandTag, error)
 	FindByIdempotencyKey(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID) (bool, error)
+	// UpdateStatusIdempotencyID updates the status of an order by idempotency key.
+	UpdateStatusIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) error
 }
 type OrderRepositoryImpl struct {
 }
@@ -65,4 +69,10 @@ func (o OrderRepositoryImpl) FindByIdempotencyKey(ctx context.Context, tx pgx.Tx
 		idempotencyID,
 	).Scan(&exists)
 	return exists, err
+}
+
+func (o OrderRepositoryImpl) UpdateStatusIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) error {
+	_, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4`,
+		status, message, time.Now(), idempotencyID)
+	return err
 }

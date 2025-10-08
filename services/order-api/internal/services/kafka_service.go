@@ -10,10 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	TopicOrdersPlaced = "orders-placed"
-)
-
 type KafkaPublisher interface {
 	PublishOrder(userUUID uuid.UUID, paymentJob views.PaymentJob) error
 	Close()
@@ -25,6 +21,7 @@ type KafkaPublisherImpl struct {
 	cnf      *configs.Config
 }
 
+// NewKafkaPublisher creates and initializes a KafkaPublisher with the provided logger and configuration parameters.
 func NewKafkaPublisher(logger *zap.Logger, cnf *configs.Config) KafkaPublisher {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cnf.KafkaBrokers, // Kafka broker(s)
@@ -54,12 +51,10 @@ func (k KafkaPublisherImpl) PublishOrder(userUUID uuid.UUID, paymentJob views.Pa
 	// Deterministic partitioning by user ID to balanced load
 	partition := int32(userUUID.ID() % k.cnf.KafkaPartition)
 
-	// Kafka topic as a variable (cannot take the address of a constant)
-	topic := TopicOrdersPlaced
 	// Produce the message asynchronously; delivery results are handled by handleDeliveryReports
 	return k.producer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{
-			Topic:     &topic,
+			Topic:     &k.cnf.KafkaTopic,
 			Partition: partition, // target partition for ordering/affinity
 		},
 		Key:   []byte(paymentJob.IdempotencyKey), // key for idempotency and partitioning semantics

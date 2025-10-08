@@ -72,6 +72,25 @@ services:
     depends_on:
       - kafka
       - postgres
+
+  payment-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.payment-worker
+    restart: unless-stopped
+    deploy:
+      mode: replicated
+      replicas: 6
+    environment:
+      APP_KAFKA_BROKERS: "kafka:29092"
+      APP_DB_PRIMARY_URL: "postgres://db_user:db_password@postgres:5432/db_name?sslmode=disable"
+      APP_DB_REPLICA_URL: "postgres://db_user:db_password@postgres:5432/db_name?sslmode=disable"
+      APP_REDIS_ADDR: "redis:6379"
+    depends_on:
+      - kafka
+      - postgres
+      - redis
+
   prometheus:
     image: prom/prometheus:v3.6.0
     container_name: prometheus
@@ -99,6 +118,16 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin  # For local development only
     depends_on:
       - prometheus
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    hostname: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
 
 volumes:
   pgdata:
@@ -108,3 +137,4 @@ volumes:
   kafka-secrets:
   zookeeper-data:
   zookeeper-secrets:
+  redis-data:

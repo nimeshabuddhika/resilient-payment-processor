@@ -16,6 +16,7 @@ type Order struct {
 	IdempotencyKey uuid.UUID
 	Amount         float64
 	Status         pkg.OrderStatus
+	Message        string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

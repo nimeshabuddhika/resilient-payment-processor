@@ -17,6 +17,7 @@ type Config struct {
 	MinDbCons      int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
 	KafkaRetry     int    `mapstructure:"KAFKA_RETRY" validate:"min=1"`
 	KafkaPartition uint32 `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
+	KafkaTopic     string `mapstructure:"KAFKA_TOPIC" validate:"required"`
 	AesKey         string `mapstructure:"AES_KEY" validate:"required"`
 }
 

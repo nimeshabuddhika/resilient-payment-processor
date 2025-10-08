@@ -13,6 +13,7 @@ type PaymentJob struct {
 	IdempotencyKey string          `json:"idempotencyKey"`
 	Amount         float64         `json:"amount"`
 	Status         pkg.OrderStatus `json:"status"`
+	RetryCount     int             `json:"retryCount"`
 	CreatedAt      time.Time       `json:"createdAt"`
 	UpdatedAt      time.Time       `json:"updatedAt"`
 }

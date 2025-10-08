@@ -2,4 +2,9 @@
 # For local development only
 AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
 KAFKA_BROKERS: "localhost:9092" # For local development only
+KAFKA_TOPIC: "orders-placed"
+KAFKA_DLQ_TOPIC: "orders-placed-dlq"
+KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
 PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
+REDIS_ADDR: "localhost:6379"
+

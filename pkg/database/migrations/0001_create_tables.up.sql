@@ -34,6 +34,7 @@ create table orders
     idempotency_key uuid                                                          not null,
     amount          numeric(15, 2)                                                not null,
     status          varchar(50)              default 'pending'::character varying not null,
+    message         varchar(200)           default ''::character varying,
     created_at      timestamp with time zone default CURRENT_TIMESTAMP,
     updated_at      timestamp with time zone default CURRENT_TIMESTAMP,
     constraint orders_accounts_id_user_id_fk
@@ -60,6 +61,8 @@ create table orders_ai_dataset
     idempotency_key uuid                                                          not null,
     amount          numeric(15, 2)                                                not null,
     status          varchar(50)              default 'pending'::character varying not null,
+    is_fraud        boolean                  default false,
+    message         varchar(200)           default ''::character varying,
     created_at      timestamp with time zone default CURRENT_TIMESTAMP,
     updated_at      timestamp with time zone default CURRENT_TIMESTAMP,
     constraint orders_ai_dataset_accounts_id_user_id_fk
