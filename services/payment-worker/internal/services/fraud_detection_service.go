@@ -13,9 +13,12 @@ import (
 type FraudFlag string
 
 const (
-	FraudFlagClean      FraudFlag = "clean"      // or "safe"
-	FraudFlagSuspicious FraudFlag = "suspicious" // or "flagged"
+	FraudFlagClean      FraudFlag = "clean"
+	FraudFlagSuspicious FraudFlag = "suspicious"
 	FraudFlagUnknown    FraudFlag = "unknown"
+
+	FraudThresholdAmount = 1000.0
+	AnalysisTimeout      = 2 * time.Second
 )
 
 type FraudStatus struct {
@@ -25,26 +28,26 @@ type FraudStatus struct {
 	Score              int8 // 0-10 score
 }
 
-// FraudDetectionService defines the interface for fraud detection operations
-type FraudDetectionService interface {
-	AnalyzeTransaction(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, paymentJob views.PaymentJob)
+// FraudDetector defines the interface for fraud detection operations
+type FraudDetector interface {
+	Analyze(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, paymentJob views.PaymentJob)
 }
 
-// FraudDetectionConf holds configuration for fraud detection service
-type FraudDetectionConf struct {
+// FraudDetectorConfig holds configuration for fraud detection service
+type FraudDetectorConfig struct {
 	Logger *zap.Logger
 	Cnf    *configs.Config
 }
 
-// NewFraudDetectionService creates a new instance of FraudDetectionService
-func NewFraudDetectionService(fdConf FraudDetectionConf) FraudDetectionService {
-	return &FraudDetectionConf{
+// NewFraudDetectionService creates a new instance of FraudDetector
+func NewFraudDetectionService(fdConf FraudDetectorConfig) FraudDetector {
+	return &FraudDetectorConfig{
 		Logger: fdConf.Logger,
 		Cnf:    fdConf.Cnf,
 	}
 }
 
-// AnalyzeTransaction checks if the transaction is fraudulent based on predefined rules.
+// Analyze checks if the transaction is fraudulent based on predefined rules.
 //
 // Current Implementation:
 //   - Simple threshold-based validation (amount > 1000)
@@ -53,19 +56,19 @@ func NewFraudDetectionService(fdConf FraudDetectionConf) FraudDetectionService {
 //   - Integrate ML model for advanced fraud detection
 //   - Implement event-driven communication via Kafka
 //   - Connect with AI-based Python/Django service for real-time analysis
-func (f FraudDetectionConf) AnalyzeTransaction(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, paymentJob views.PaymentJob) {
+func (f *FraudDetectorConfig) Analyze(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, job views.PaymentJob) {
 	defer wg.Done()
 	// simulate processing time with context cancellation support
 	select {
 	case <-ctx.Done():
 		statusChan <- FraudStatus{IsEligibleForRetry: true, FraudFlag: FraudFlagUnknown, Reason: "context cancelled", Score: 10}
 		return
-	case <-time.After(time.Second * 2):
+	case <-time.After(AnalysisTimeout):
 		// continue processing
 	}
 
 	// simulate fraudulent transaction
-	if amount > 1000 {
+	if amount > FraudThresholdAmount {
 		statusChan <- FraudStatus{FraudFlag: FraudFlagSuspicious, Reason: "amount exceeds threshold", Score: 10}
 		return
 	}

@@ -10,22 +10,22 @@ import (
 )
 
 type KafkaRetryHandler interface {
-	InitializeRetryChannel(ctx context.Context)
+	Start(ctx context.Context)
 }
 
-type KafkaRetryConf struct {
-	Context      context.Context
-	Logger       *zap.Logger
-	Cnf          *configs.Config
-	RetryChannel chan views.PaymentJob
+type KafkaRetryConfig struct {
+	Context   context.Context
+	Logger    *zap.Logger
+	Config    *configs.Config
+	RetryChan chan views.PaymentJob
 }
 
-func NewKafkaRetryHandler(retryConf KafkaRetryConf) KafkaRetryHandler {
-	return &retryConf
+func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
+	return &cfg
 }
 
-func (k KafkaRetryConf) InitializeRetryChannel(ctx context.Context) {
-	k.Logger.Info("initializing retry channel")
+func (k KafkaRetryConfig) Start(ctx context.Context) {
+	k.Logger.Info("starting retry handler")
 
 	// Read from retry channel and retry failed jobs
 	go func() {
@@ -33,8 +33,8 @@ func (k KafkaRetryConf) InitializeRetryChannel(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case paymentJob := <-k.RetryChannel:
-				k.Logger.Info("kafka retry listener", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Int("retry_count", paymentJob.RetryCount))
+			case job := <-k.RetryChan:
+				k.Logger.Info("retrying job", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int("retry_count", job.RetryCount))
 			}
 		}
 	}()
