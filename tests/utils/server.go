@@ -1,28 +1,27 @@
 package testutils
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
+	appsvc "github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/app"
 	"github.com/testcontainers/testcontainers-go"
+	tckafkamod "github.com/testcontainers/testcontainers-go/modules/kafka"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// StartOrderAPIServer starts the order-api service by running `go run ./services/order-api/cmd` on a free port.
+// StartOrderAPIServer starts the order-api HTTP server in-process using NewApp.
 // It returns the base URL and a cleanup function that should be deferred in tests.
 func StartOrderAPIServer(t *testing.T) (baseURL string, cleanup func()) {
 	t.Helper()
@@ -32,61 +31,60 @@ func StartOrderAPIServer(t *testing.T) (baseURL string, cleanup func()) {
 		t.Fatalf("failed to get free port: %v", err)
 	}
 
-	// Start a disposable Postgres for tests
+	// Start disposable containers: Postgres and Kafka
 	dsnNoProto, pgTerminate := startPostgresForTests(t)
+	kBootstrap, kTerminate := startKafkaForTests(t)
+	// Ensure the Kafka topic exists before starting the app
+	ensureKafkaTopic(t, kBootstrap, kafkaTopic, 4)
 
-	cmd := exec.Command("go", "run", "./services/order-api/cmd")
+	// Configure environment variables
+	_ = os.Setenv("APP_PORT", fmt.Sprintf("%d", port))
+	_ = os.Setenv("APP_KAFKA_BROKERS", kBootstrap)
+	_ = os.Setenv("APP_KAFKA_TOPIC", kafkaTopic)
+	_ = os.Setenv("APP_AES_KEY", "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=")
+	_ = os.Setenv("APP_PRIMARY_DB_ADDR", dsnNoProto)
+	_ = os.Setenv("APP_REPLICA_DB_ADDR", dsnNoProto)
+	_ = os.Setenv("GIN_MODE", "test")
 
-	repoRoot := findRepoRoot()
-	if repoRoot != "" {
-		cmd.Dir = repoRoot
-	}
-
-	// Pass env vars for the service
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("APP_PORT=%d", port))
-
-	env = append(env, "APP_KAFKA_BROKERS=localhost:9092")
-	env = append(env, "APP_KAFKA_TOPIC=orders-test")
-	env = append(env, "APP_AES_KEY=Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=")
-	env = append(env, fmt.Sprintf("APP_PRIMARY_DB_ADDR=%s", dsnNoProto))
-	env = append(env, fmt.Sprintf("APP_REPLICA_DB_ADDR=%s", dsnNoProto))
-	env = append(env, "GIN_MODE=test")
-	cmd.Env = env
-
-	// Capture stdout/stderr to help with debugging if startup fails
-	stderr, _ := cmd.StderrPipe()
-	stdout, _ := cmd.StdoutPipe()
-
-	if err := cmd.Start(); err != nil {
+	// Build app and run server
+	pkg.InitLogger()
+	logger := pkg.Logger
+	ctx := context.Background()
+	srv, appCleanup, err := appsvc.NewApp(ctx, logger)
+	if err != nil {
 		pgTerminate()
-		t.Fatalf("failed to start order-api: %v", err)
+		kTerminate()
+		t.Fatalf("failed to build order-api app: %v", err)
 	}
-
-	// Stream logs to testing output asynchronously
-	go streamToTesting(t, stdout)
-	go streamToTesting(t, stderr)
 
 	baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 
+	go func() {
+		_ = srv.ListenAndServe()
+	}()
+
 	// Wait for readiness with timeout, allow time for migrations
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	wctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := waitForReady(ctx, baseURL+"/health"); err != nil {
-		// If not ready, stop process and fail
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+	if err := waitForReady(wctx, baseURL+"/health"); err != nil {
+		_ = srv.Close()
+		appCleanup()
 		pgTerminate()
+		kTerminate()
 		t.Fatalf("order-api failed to become ready: %v", err)
 	}
 
-	// Seed database records
+	// Seed database records now that migrations are applied
 	seedDB(t, dsnNoProto)
 
 	cleanup = func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		// Graceful shutdown
+		ctx, c := context.WithTimeout(context.Background(), 3*time.Second)
+		defer c()
+		_ = srv.Shutdown(ctx)
+		appCleanup()
 		pgTerminate()
+		kTerminate()
 	}
 	return baseURL, cleanup
 }
@@ -96,10 +94,15 @@ func StartOrderAPIServer(t *testing.T) (baseURL string, cleanup func()) {
 // (the app prepends the protocol internally), and a termination func for cleanup.
 var seededUserID uuid.UUID
 var seededAccountID uuid.UUID
+var kafkaBootstrap string
+var kafkaTopic string = "orders-test"
 
 func GetSeededIDs() (userID uuid.UUID, accountID uuid.UUID) {
 	return seededUserID, seededAccountID
 }
+
+func GetKafkaBootstrap() string { return kafkaBootstrap }
+func GetKafkaTopic() string     { return kafkaTopic }
 
 func startPostgresForTests(t *testing.T) (dsnNoProto string, terminate func()) {
 	t.Helper()
@@ -131,7 +134,7 @@ func startPostgresForTests(t *testing.T) (dsnNoProto string, terminate func()) {
 		t.Fatalf("failed to start postgres test container: %v", err)
 	}
 
-	// Build connection string from mapped port
+	// Build connection string
 	host, err := pgC.Host(ctx)
 	if err != nil {
 		_ = pgC.Terminate(context.Background())
@@ -212,6 +215,60 @@ func seedDB(t *testing.T, dsnNoProto string) {
 	}
 }
 
+func startKafkaForTests(t *testing.T) (bootstrap string, terminate func()) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	kc, err := tckafkamod.RunContainer(ctx)
+	if err != nil {
+		t.Fatalf("failed to start kafka test container: %v", err)
+	}
+
+	// Derive bootstrap from mapped port
+	host, err := kc.Host(ctx)
+	if err != nil {
+		_ = kc.Terminate(context.Background())
+		t.Fatalf("failed to get kafka host: %v", err)
+	}
+	mapped, err := kc.MappedPort(ctx, "9092/tcp")
+	if err != nil {
+		// try alternative default external port used by some images
+		mapped, err = kc.MappedPort(ctx, "9093/tcp")
+		if err != nil {
+			_ = kc.Terminate(context.Background())
+			t.Fatalf("failed to get kafka mapped port: %v", err)
+		}
+	}
+	bootstrap = fmt.Sprintf("%s:%s", host, mapped.Port())
+	kafkaBootstrap = bootstrap
+
+	terminate = func() {
+		ctx, c := context.WithTimeout(context.Background(), 30*time.Second)
+		defer c()
+		_ = kc.Terminate(ctx)
+	}
+	return bootstrap, terminate
+}
+
+func ensureKafkaTopic(t *testing.T, bootstrap, topic string, partitions int) {
+	admin, err := ckafka.NewAdminClient(&ckafka.ConfigMap{"bootstrap.servers": bootstrap})
+	if err != nil {
+		t.Logf("kafka admin create failed: %v", err)
+		return
+	}
+	defer admin.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	specs := []ckafka.TopicSpecification{{
+		Topic:             topic,
+		NumPartitions:     partitions,
+		ReplicationFactor: 1,
+	}}
+	_, _ = admin.CreateTopics(ctx, specs)
+}
+
 func getFreePort() (int, error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -236,35 +293,4 @@ func waitForReady(ctx context.Context, url string) error {
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
-}
-
-func streamToTesting(t *testing.T, r io.ReadCloser) {
-	t.Helper()
-	defer r.Close()
-	s := bufio.NewScanner(r)
-	for s.Scan() {
-		line := s.Text()
-		// Reduce noise from gin debug logs in CI
-		if strings.TrimSpace(line) != "" {
-			t.Log(line)
-		}
-	}
-}
-
-// findRepoRoot attempts to find the repo root by walking up from the current file.
-func findRepoRoot() string {
-	// Start from the directory of this file
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return ""
-	}
-	dir := filepath.Dir(file)
-	for i := 0; i < 10; i++ {
-		candidate := filepath.Join(dir, "..", "..", "go.mod")
-		if _, err := os.Stat(candidate); err == nil {
-			return filepath.Clean(filepath.Join(dir, "..", ".."))
-		}
-		dir = filepath.Clean(filepath.Join(dir, ".."))
-	}
-	return ""
 }
