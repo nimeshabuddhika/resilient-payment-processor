@@ -51,7 +51,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialize redis client", zap.Error(err))
 	}
-	defer redisCloser()
 	logger.Info("redis initialized")
 
 	// Initialize payment service dependencies
@@ -60,20 +59,16 @@ func main() {
 		logger.Fatal("failed to decode AES key", zap.Error(err))
 	}
 
-	// Initialize kafka retry handler
+	// Initialize retry channel
 	retryChan := make(chan views.PaymentJob)
-	retryHandler := services.NewKafkaRetryHandler(services.KafkaRetryConfig{
-		Logger:    logger,
-		Config:    cfg,
-		RetryChan: retryChan,
-	})
-	retryHandler.Start(ctx)
+	// initialize repositories
+	orderRepo := repositories.NewOrderRepository()
 
 	paymentSvc := services.NewPaymentService(services.PaymentServiceConfig{
 		Logger:      logger,
 		Config:      cfg,
 		AccountRepo: repositories.NewAccountRepository(),
-		OrderRepo:   repositories.NewOrderRepository(),
+		OrderRepo:   orderRepo,
 		UserRepo:    repositories.NewUserRepository(),
 		DB:          db,
 		RedisClient: redisClient,
@@ -85,15 +80,29 @@ func main() {
 		RetryChan: retryChan,
 	})
 
-	// Initialize kafka consumer
+	// Initialize kafka retry handler
+	retryHandler := services.NewKafkaRetryHandler(services.KafkaRetryConfig{
+		Context:        ctx,
+		Logger:         logger,
+		Config:         cfg,
+		RetryChan:      retryChan,
+		PaymentService: paymentSvc,
+		DB:             db,
+		OrderRepo:      orderRepo,
+	})
+	closeRetryHandler := retryHandler.Start()
+
+	// Initialize kafka order consumer
 	orderHandler := services.NewKafkaOrderConsumer(services.KafkaOrderConfig{
 		Logger:         logger,
 		Config:         cfg,
 		PaymentService: paymentSvc,
 	})
-	closeConsumer := orderHandler.Consume(ctx)
+	closeOrderConsumer := orderHandler.Consume(ctx)
 
 	<-ctx.Done()
-	closeConsumer()  //Close kafka order consumer
+	closeOrderConsumer() //Close kafka order consumer
+	redisCloser()
+	closeRetryHandler()
 	close(retryChan) // Close retry channel to stop retry handler
 }

@@ -20,10 +20,13 @@ type Config struct {
 	KafkaTopic          string `mapstructure:"KAFKA_TOPIC" validate:"required"`
 	KafkaDLQTopic       string `mapstructure:"KAFKA_DLQ_TOPIC" validate:"required"`
 	KafkaConsumerGroup  string `mapstructure:"KAFKA_CONSUMER_GROUP" validate:"required"`
+	KafkaRetryTopic     string `mapstructure:"KAFKA_RETRY_TOPIC" validate:"required"`
+	KafkaRetryDLQTopic  string `mapstructure:"KAFKA_RETRY_DLQ_TOPIC" validate:"required"`
+	RetryBaseBackoffSec int    `mapstructure:"RETRY_BASE_BACKOFF_SEC" validate:"min=3"`
 	AesKey              string `mapstructure:"AES_KEY" validate:"required"`
 	RedisAddr           string `mapstructure:"REDIS_ADDR" validate:"required"`
 	MaxReplicaRateLimit int    `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
-	OrderRetryThreshold int    `mapstructure:"ORDER_RETRY_THRESHOLD" validate:"min=1,max=5"`
+	MaxRetryCount       int    `mapstructure:"MaxRetryCount" validate:"min=1,max=5"`
 }
 
 func Load(logger *zap.Logger) (*Config, error) {

@@ -41,7 +41,7 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 		cfg.Logger.Fatal("failed to create kafka consumer", zap.Error(err))
 	}
 
-	// Create a DLQ producer (idempotent for safety, optional)
+	// Create a DLQ producer
 	dlqProducer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers,
 		"enable.idempotence": true,

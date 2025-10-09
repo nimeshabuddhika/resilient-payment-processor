@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This script initializes Kafka topics inside the 'kafka' container.
-# It is safe to run multiple times (topic-exists errors are ignored).
-
-# Notes:
-# - When running inside the Kafka container, use broker 'kafka:29092' (internal listener).
-# - 'localhost:9092' is for clients on the host machine (outside Docker).
-
 BROKER="kafka:29092"
 TOPIC_MAIN="orders-placed"
 TOPIC_DLQ="orders-placed-dlq"
+TOPIC_RETRY="orders-retry"
+TOPIC_RETRY_DLQ="orders-retry-dlq"
 PARTITIONS=4
 REPLICATION=1
 DLQ_RETENTION_MS=$((14 * 24 * 60 * 60 * 1000))  # 14 days
+RETRY_RETENTION_MS=$((24 * 60 * 60 * 1000))      # 24 hours
 
 echo "Creating topics in container against broker: ${BROKER}"
 
@@ -47,12 +43,31 @@ docker exec kafka \
       --config cleanup.policy=delete \
       --config retention.ms=${DLQ_RETENTION_MS} || true
 
-    echo 'Verify DLQ topic config:'
-    kafka-configs \
+    echo 'Creating RETRY topic: ${TOPIC_RETRY}'
+    kafka-topics \
       --bootstrap-server ${BROKER} \
-      --entity-type topics \
-      --entity-name ${TOPIC_DLQ} \
-      --describe || true
+      --create \
+      --if-not-exists \
+      --topic ${TOPIC_RETRY} \
+      --partitions ${PARTITIONS} \
+      --replication-factor ${REPLICATION} \
+      --config cleanup.policy=delete \
+      --config retention.ms=${RETRY_RETENTION_MS} || true
+
+    echo 'Creating RETRY DLQ topic: ${TOPIC_RETRY_DLQ}'
+    kafka-topics \
+      --bootstrap-server ${BROKER} \
+      --create \
+      --if-not-exists \
+      --topic ${TOPIC_RETRY_DLQ} \
+      --partitions ${PARTITIONS} \
+      --replication-factor ${REPLICATION} \
+      --config cleanup.policy=delete \
+      --config retention.ms=${DLQ_RETENTION_MS} || true
+
+    echo 'Verify topics config:'
+    kafka-topics --bootstrap-server ${BROKER} --describe --topic ${TOPIC_RETRY} || true
+    kafka-topics --bootstrap-server ${BROKER} --describe --topic ${TOPIC_RETRY_DLQ} || true
 
     echo 'Listing topics (post):'
     kafka-topics --bootstrap-server ${BROKER} --list || true

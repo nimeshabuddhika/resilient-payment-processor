@@ -5,7 +5,9 @@ KAFKA_BROKERS: "localhost:9092" # For local development only
 KAFKA_TOPIC: "orders-placed"
 KAFKA_DLQ_TOPIC: "orders-placed-dlq"
 KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
+KAFKA_RETRY_TOPIC: "orders-retry"
+KAFKA_RETRY_DLQ_TOPIC: "orders-retry-dlq"
+RETRY_BASE_BACKOFF_SEC: "5"
 PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
 REDIS_ADDR: "localhost:6379"
-ORDER_RETRY_THRESHOLD: "3"
-
+MaxRetryCount: "3"
