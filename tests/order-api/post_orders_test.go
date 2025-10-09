@@ -7,15 +7,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
-	testutils "github.com/nimeshabuddhika/resilient-payment-processor/tests/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/tests"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateOrder_Success(t *testing.T) {
 	// Arrange
-	baseURL, stop := testutils.StartOrderAPIServer(t)
+	baseURL, stop := tests.StartOrderAPIServer(t)
 	defer stop()
-	userID, accountID := testutils.GetSeededIDs()
+	userID, accountID := tests.GetSeededIDs()
 
 	payload := map[string]interface{}{
 		"idempotencyId":   uuid.New().String(),
@@ -30,16 +30,16 @@ func TestCreateOrder_Success(t *testing.T) {
 	headers := map[string]string{"userId": userID.String()}
 
 	// Act
-	resp, err := testutils.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
+	resp, err := tests.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
 	assert.NoError(t, err)
 
 	// Assert response
-	traceId := testutils.GetTraceId(resp)
+	traceId := tests.GetTraceId(resp)
 	assert.NotEmpty(t, traceId)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// Assert response body
-	out, err := testutils.DecodeSuccess(resp.Body)
+	out, err := tests.DecodeSuccess(resp.Body)
 	assert.NoError(t, err)
 	orderID, ok := out.Data["orderId"].(string)
 	assert.True(t, ok)
@@ -47,9 +47,9 @@ func TestCreateOrder_Success(t *testing.T) {
 }
 
 func TestCreateOrder_InvalidAmount_Less_Than_minimum(t *testing.T) {
-	baseURL, stop := testutils.StartOrderAPIServer(t)
+	baseURL, stop := tests.StartOrderAPIServer(t)
 	defer stop()
-	userID, accountID := testutils.GetSeededIDs()
+	userID, accountID := tests.GetSeededIDs()
 
 	payload := map[string]interface{}{
 		"idempotencyId": uuid.New().String(),
@@ -60,17 +60,17 @@ func TestCreateOrder_InvalidAmount_Less_Than_minimum(t *testing.T) {
 
 	headers := map[string]string{"userId": userID.String()}
 
-	resp, err := testutils.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
+	resp, err := tests.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
 	assert.NoError(t, err)
 
 	// Assert response
-	traceId := testutils.GetTraceId(resp)
+	traceId := tests.GetTraceId(resp)
 	assert.NotEmpty(t, traceId)
 	assert.NotEqual(t, http.StatusCreated, resp.StatusCode)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "expected status %d, got %d", http.StatusBadRequest, resp.StatusCode)
 
 	// Assert response body
-	out, err := testutils.DecodeError(resp.Body)
+	out, err := tests.DecodeError(resp.Body)
 
 	assert.NoError(t, err)
 	assert.Equal(t, pkg.ErrInvalidInputCode.Code, out.Code)

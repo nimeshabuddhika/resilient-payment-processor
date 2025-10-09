@@ -7,18 +7,18 @@ import (
 
 	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/google/uuid"
-	testutils "github.com/nimeshabuddhika/resilient-payment-processor/tests/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/tests"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestKafkaPublish_Success verifies that creating an order causes a message to be published to Kafka.
 func TestKafkaPublish_Success(t *testing.T) {
-	baseURL, stop := testutils.StartOrderAPIServer(t)
+	baseURL, stop := tests.StartOrderAPIServer(t)
 	defer stop()
 
-	userID, accountID := testutils.GetSeededIDs()
-	bootstrap := testutils.GetKafkaBootstrap()
-	topic := testutils.GetKafkaTopic()
+	userID, accountID := tests.GetSeededIDs()
+	bootstrap := tests.GetKafkaBootstrap()
+	topic := tests.GetKafkaTopic()
 
 	// Start a consumer first and ensure it is assigned before producing to avoid missing messages
 	groupID := uuid.New().String()
@@ -63,7 +63,7 @@ func TestKafkaPublish_Success(t *testing.T) {
 	headers := map[string]string{"userId": userID.String()}
 
 	// Act: create order which should publish to Kafka
-	resp, err := testutils.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
+	resp, err := tests.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
 	assert.NoError(t, err)
 	assert.Equal(t, 201, resp.StatusCode)
 

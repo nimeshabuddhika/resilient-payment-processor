@@ -1,4 +1,4 @@
-package testutils
+package tests
 
 import (
 	"context"
@@ -31,9 +31,44 @@ func StartOrderAPIServer(t *testing.T) (baseURL string, cleanup func()) {
 		t.Fatalf("failed to get free port: %v", err)
 	}
 
-	// Start disposable containers: Postgres and Kafka
-	dsnNoProto, pgTerminate := startPostgresForTests(t)
-	kBootstrap, kTerminate := startKafkaForTests(t)
+	// Start disposable containers: Postgres and Kafka concurrently
+	type pgResult struct {
+		dsnNoProto string
+		terminate  func()
+		err        error
+	}
+	type kResult struct {
+		bootstrap string
+		terminate func()
+		err       error
+	}
+	pgCh := make(chan pgResult, 1)
+	kCh := make(chan kResult, 1)
+	go func() {
+		dsn, term, err := startPostgresForTests()
+		pgCh <- pgResult{dsnNoProto: dsn, terminate: term, err: err}
+	}()
+	go func() {
+		boot, term, err := startKafkaForTests()
+		kCh <- kResult{bootstrap: boot, terminate: term, err: err}
+	}()
+
+	var (
+		pgRes = <-pgCh
+		kRes  = <-kCh
+	)
+	if pgRes.err != nil || kRes.err != nil {
+		// Best-effort cleanup if any started successfully
+		if pgRes.err == nil && pgRes.terminate != nil {
+			pgRes.terminate()
+		}
+		if kRes.err == nil && kRes.terminate != nil {
+			kRes.terminate()
+		}
+		t.Fatalf("failed to start dependencies: postgres err=%v, kafka err=%v", pgRes.err, kRes.err)
+	}
+	dsnNoProto, pgTerminate := pgRes.dsnNoProto, pgRes.terminate
+	kBootstrap, kTerminate := kRes.bootstrap, kRes.terminate
 	// Ensure the Kafka topic exists before starting the app
 	ensureKafkaTopic(t, kBootstrap, kafkaTopic, 4)
 
@@ -104,9 +139,7 @@ func GetSeededIDs() (userID uuid.UUID, accountID uuid.UUID) {
 func GetKafkaBootstrap() string { return kafkaBootstrap }
 func GetKafkaTopic() string     { return kafkaTopic }
 
-func startPostgresForTests(t *testing.T) (dsnNoProto string, terminate func()) {
-	t.Helper()
-
+func startPostgresForTests() (dsnNoProto string, terminate func(), err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -126,29 +159,32 @@ func startPostgresForTests(t *testing.T) (dsnNoProto string, terminate func()) {
 		},
 		WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second),
 	}
-	pgC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	pgC, e := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 	})
-	if err != nil {
-		t.Fatalf("failed to start postgres test container: %v", err)
+	if e != nil {
+		err = fmt.Errorf("failed to start postgres test container: %w", e)
+		return
 	}
 
 	// Build connection string
-	host, err := pgC.Host(ctx)
-	if err != nil {
+	host, e := pgC.Host(ctx)
+	if e != nil {
 		_ = pgC.Terminate(context.Background())
-		t.Fatalf("failed to get postgres host: %v", err)
+		err = fmt.Errorf("failed to get postgres host: %w", e)
+		return
 	}
-	port, err := pgC.MappedPort(ctx, "5432/tcp")
-	if err != nil {
+	port, e := pgC.MappedPort(ctx, "5432/tcp")
+	if e != nil {
 		_ = pgC.Terminate(context.Background())
-		t.Fatalf("failed to get mapped port: %v", err)
+		err = fmt.Errorf("failed to get mapped port: %w", e)
+		return
 	}
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port.Port(), dbName)
 
 	// Prepare DB: create extension and schema
-	if err := func() error {
+	if e := func() error {
 		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer ccancel()
 		conn, err := pgx.Connect(cctx, connStr)
@@ -163,13 +199,13 @@ func startPostgresForTests(t *testing.T) (dsnNoProto string, terminate func()) {
 			return err
 		}
 		return nil
-	}(); err != nil {
+	}(); e != nil {
 		_ = pgC.Terminate(context.Background())
-		t.Fatalf("failed to prepare postgres database: %v", err)
+		err = fmt.Errorf("failed to prepare postgres database: %w", e)
+		return
 	}
 
 	terminate = func() {
-		// best-effort terminate
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		_ = pgC.Terminate(ctx)
@@ -178,7 +214,7 @@ func startPostgresForTests(t *testing.T) (dsnNoProto string, terminate func()) {
 	// The app expects DSN without protocol and it adds it internally.
 	// Convert postgres://user:pass@host:port/db?params -> user:pass@host:port/db?params
 	dsnNoProto = strings.TrimPrefix(connStr, "postgres://")
-	return dsnNoProto, terminate
+	return
 }
 
 func seedDB(t *testing.T, dsnNoProto string) {
@@ -215,29 +251,31 @@ func seedDB(t *testing.T, dsnNoProto string) {
 	}
 }
 
-func startKafkaForTests(t *testing.T) (bootstrap string, terminate func()) {
-	t.Helper()
+func startKafkaForTests() (bootstrap string, terminate func(), err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	kc, err := tckafkamod.RunContainer(ctx)
-	if err != nil {
-		t.Fatalf("failed to start kafka test container: %v", err)
+	kc, e := tckafkamod.RunContainer(ctx)
+	if e != nil {
+		err = fmt.Errorf("failed to start kafka test container: %w", e)
+		return
 	}
 
 	// Derive bootstrap from mapped port
-	host, err := kc.Host(ctx)
-	if err != nil {
+	host, e := kc.Host(ctx)
+	if e != nil {
 		_ = kc.Terminate(context.Background())
-		t.Fatalf("failed to get kafka host: %v", err)
+		err = fmt.Errorf("failed to get kafka host: %w", e)
+		return
 	}
-	mapped, err := kc.MappedPort(ctx, "9092/tcp")
-	if err != nil {
+	mapped, e := kc.MappedPort(ctx, "9092/tcp")
+	if e != nil {
 		// try alternative default external port used by some images
-		mapped, err = kc.MappedPort(ctx, "9093/tcp")
-		if err != nil {
+		mapped, e = kc.MappedPort(ctx, "9093/tcp")
+		if e != nil {
 			_ = kc.Terminate(context.Background())
-			t.Fatalf("failed to get kafka mapped port: %v", err)
+			err = fmt.Errorf("failed to get kafka mapped port: %w", e)
+			return
 		}
 	}
 	bootstrap = fmt.Sprintf("%s:%s", host, mapped.Port())
@@ -248,7 +286,7 @@ func startKafkaForTests(t *testing.T) (bootstrap string, terminate func()) {
 		defer c()
 		_ = kc.Terminate(ctx)
 	}
-	return bootstrap, terminate
+	return
 }
 
 func ensureKafkaTopic(t *testing.T, bootstrap, topic string, partitions int) {
