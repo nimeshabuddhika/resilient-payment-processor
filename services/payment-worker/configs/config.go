@@ -1,6 +1,8 @@
 package configs
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
@@ -10,23 +12,26 @@ import (
 
 // Config holds application configuration for payment-worker.
 type Config struct {
-	KafkaBrokers        string `mapstructure:"KAFKA_BROKERS" validate:"required"`
-	PrimaryDbAddr       string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
-	ReplicaDbAddr       string `mapstructure:"REPLICA_DB_ADDR"`
-	MaxDbCons           int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
-	MinDbCons           int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
-	KafkaRetry          int    `mapstructure:"KAFKA_RETRY" validate:"min=1"`
-	KafkaPartition      uint32 `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
-	KafkaTopic          string `mapstructure:"KAFKA_TOPIC" validate:"required"`
-	KafkaDLQTopic       string `mapstructure:"KAFKA_DLQ_TOPIC" validate:"required"`
-	KafkaConsumerGroup  string `mapstructure:"KAFKA_CONSUMER_GROUP" validate:"required"`
-	KafkaRetryTopic     string `mapstructure:"KAFKA_RETRY_TOPIC" validate:"required"`
-	KafkaRetryDLQTopic  string `mapstructure:"KAFKA_RETRY_DLQ_TOPIC" validate:"required"`
-	RetryBaseBackoffSec int    `mapstructure:"RETRY_BASE_BACKOFF_SEC" validate:"min=3"`
-	AesKey              string `mapstructure:"AES_KEY" validate:"required"`
-	RedisAddr           string `mapstructure:"REDIS_ADDR" validate:"required"`
-	MaxReplicaRateLimit int    `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
-	MaxRetryCount       int    `mapstructure:"MaxRetryCount" validate:"min=1,max=5"`
+	KafkaBrokers                  string        `mapstructure:"KAFKA_BROKERS" validate:"required"`
+	PrimaryDbAddr                 string        `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
+	ReplicaDbAddr                 string        `mapstructure:"REPLICA_DB_ADDR"`
+	MaxDbCons                     int32         `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
+	MinDbCons                     int32         `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
+	KafkaRetry                    int           `mapstructure:"KAFKA_RETRY" validate:"min=1"`
+	KafkaPartition                uint32        `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
+	KafkaTopic                    string        `mapstructure:"KAFKA_TOPIC" validate:"required"`
+	KafkaDLQTopic                 string        `mapstructure:"KAFKA_DLQ_TOPIC" validate:"required"`
+	KafkaConsumerGroup            string        `mapstructure:"KAFKA_CONSUMER_GROUP" validate:"required"`
+	KafkaRetryTopic               string        `mapstructure:"KAFKA_RETRY_TOPIC" validate:"required"`
+	KafkaRetryDLQTopic            string        `mapstructure:"KAFKA_RETRY_DLQ_TOPIC" validate:"required"`
+	RetryBaseBackoff              time.Duration `mapstructure:"RETRY_BASE_BACKOFF" validate:"required"`
+	MaxRetryBackoff               time.Duration `mapstructure:"MAX_RETRY_BACKOFF" validate:"required"`
+	AesKey                        string        `mapstructure:"AES_KEY" validate:"required"`
+	RedisAddr                     string        `mapstructure:"REDIS_ADDR" validate:"required"`
+	MaxReplicaRateLimit           int           `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
+	MaxRetryCount                 int           `mapstructure:"MaxRetryCount" validate:"min=1,max=5"`
+	MaxOrdersPlacedConcurrentJobs int           `mapstructure:"MAX_ORDERS_PLACED_CONCURRENT_JOBS" validate:"min=1"`
+	MaxOrdersRetryConcurrentJobs  int           `mapstructure:"MAX_ORDERS_RETRY_CONCURRENT_JOBS" validate:"min=1"`
 }
 
 func Load(logger *zap.Logger) (*Config, error) {

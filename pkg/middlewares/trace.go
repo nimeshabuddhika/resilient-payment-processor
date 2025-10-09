@@ -13,14 +13,14 @@ func TraceID(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestIDStr := c.Request.Header.Get(pkg.HeaderRequestId)
 		if utils.IsEmpty(requestIDStr) {
-			logger.Error("request ID is missing in header", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
+			logger.Error("request_id_is_missing_in_header", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
 			httpErr := pkg.ToErrorResponse(logger, "", pkg.NewAppError(pkg.ErrInvalidInputCode, "request ID is missing in header", nil))
 			c.AbortWithStatusJSON(httpErr.Status, httpErr)
 			return
 		}
 		_, err := uuid.Parse(requestIDStr)
 		if err != nil {
-			logger.Error("failed to parse request ID", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
+			logger.Error("failed_to_parse_request_id", zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
 			httpErr := pkg.ToErrorResponse(logger, "", pkg.NewAppError(pkg.ErrInvalidInputCode, "failed to parse request ID", nil))
 			c.AbortWithStatusJSON(httpErr.Status, httpErr)
 			return
@@ -29,7 +29,7 @@ func TraceID(logger *zap.Logger) gin.HandlerFunc {
 		if utils.IsEmpty(traceID) {
 			traceID = uuid.New().String() // UUID; TODO upgrade to crypto/rand or OpenTelemetry integration later
 		}
-		logger.Info("inbound request", zap.String(pkg.RequestId, requestIDStr), zap.String(pkg.TraceId, traceID), zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
+		logger.Info("inbound_request", zap.String(pkg.RequestId, requestIDStr), zap.String(pkg.TraceId, traceID), zap.String("method", c.Request.Method), zap.String("path", c.FullPath()))
 		// Set in context for handlers/services (e.g., logging, Kafka publish)
 		c.Set(pkg.TraceId, traceID)
 		// Propagate in the response header for clients/downstream tracing

@@ -29,7 +29,7 @@ func main() {
 	// Build app server and dependencies
 	srv, cleanup, err := appsvc.NewApp(ctx, logger)
 	if err != nil {
-		logger.Fatal("failed to build app", zap.Error(err))
+		logger.Fatal("failed_to_build_app", zap.Error(err))
 	}
 	defer cleanup()
 
@@ -37,7 +37,7 @@ func main() {
 	go func() {
 		logger.Sugar().Infow("Order API started", "addr", srv.Addr)
 		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatal("server error", zap.Error(err))
+			logger.Fatal("server_error", zap.Error(err))
 		}
 	}()
 
@@ -51,7 +51,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Fatal("shutdown error", zap.Error(err))
+		logger.Fatal("shutdown_error", zap.Error(err))
 	}
 
 	if err = logger.Sync(); err != nil {

@@ -28,7 +28,7 @@ type PaymentService interface {
 const (
 	TransactionProcessingDelay = 5 * time.Second
 	RandomFailureDivisor       = 4
-	NetworkIssueModulo         = 10
+	NetworkIssueModulo         = 5
 )
 
 var (
@@ -68,18 +68,18 @@ func (p *PaymentServiceConfig) HandlePayment(ctx context.Context, job views.Paym
 	// Begin transaction
 	tx, err := p.DB.Begin(ctx)
 	if err != nil {
-		p.Logger.Error("failed to begin transaction", zap.Error(err))
+		p.Logger.Error("failed_to_begin_transaction", zap.Error(err))
 		return err
 	}
 	defer func() {
 		transErr := p.DB.Commit(ctx, tx)
-		p.Logger.Info("transaction committed", zap.Error(transErr))
+		p.Logger.Info("transaction_committed", zap.Error(transErr))
 	}()
 
 	//decrypt transaction amount
 	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.AESKey)
 	if err != nil {
-		p.Logger.Error("failed to decrypt transaction amount", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		p.Logger.Error("failed_to_decrypt_transaction_amount", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "failed to decrypt transaction amount")
 		return err
 	}
@@ -100,7 +100,7 @@ func (p *PaymentServiceConfig) HandlePayment(ctx context.Context, job views.Paym
 	}
 
 	// Wait for fraud analysis to complete
-	p.Logger.Info("waiting for fraud analysis to complete", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	p.Logger.Info("waiting_for_fraud_analysis_to_complete", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 	fraudWG.Wait()
 	close(fraudStatusChan)
 
@@ -110,7 +110,7 @@ func (p *PaymentServiceConfig) HandlePayment(ctx context.Context, job views.Paym
 	if err != nil {
 		return err
 	}
-	p.Logger.Info("transaction is not fraudulent", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
+	p.Logger.Info("transaction_is_not_fraudulent", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
 
 	// process transaction
 	var paymentWG sync.WaitGroup
@@ -120,7 +120,7 @@ func (p *PaymentServiceConfig) HandlePayment(ctx context.Context, job views.Paym
 	go p.processTransaction(ctx, &paymentWG, paymentStatusChan, transactionAmount, job)
 
 	// wait for payment processing to complete
-	p.Logger.Info("waiting for payment processing to complete", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	p.Logger.Info("waiting_for_payment_processing_to_complete", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 	paymentWG.Wait()
 	close(paymentStatusChan)
 
@@ -131,14 +131,14 @@ func (p *PaymentServiceConfig) HandlePayment(ctx context.Context, job views.Paym
 		return err
 	}
 
-	p.Logger.Info("payment processed successfully, updating account balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	p.Logger.Info("payment_processed_successfully_updating_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 
 	// update account balance
 	newBalance := accountBalance - transactionAmount
 	newBalanceEnc, _ := utils.EncryptAES(utils.Float64ToByte(newBalance), p.AESKey)
 	err = p.UserRepo.UpdateBalanceByAccountId(ctx, tx, job.AccountID, newBalanceEnc)
 	if err != nil {
-		p.Logger.Error("failed to update account balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "failed to update account balance")
 		return err
 	}
@@ -158,12 +158,12 @@ func (p *PaymentServiceConfig) handlePaymentStatus(ctx context.Context, tx pgx.T
 		// send it to retry channel
 		p.RetryChan <- paymentJob
 
-		p.Logger.Error("transaction failed, initiating retry process", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(transStatus.Err))
+		p.Logger.Error("transaction_failed_initiating_retry_process", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(transStatus.Err))
 		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "transaction failed, initiating retry process")
 		return transStatus.Err
 	}
 	// handle non-retryable payment error
-	p.Logger.Error("transaction failed, no retry attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(transStatus.Err))
+	p.Logger.Error("transaction_failed_no_retry_attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(transStatus.Err))
 	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "transaction failed, no retry possible")
 	return transStatus.Err
 }
@@ -174,18 +174,18 @@ func (p *PaymentServiceConfig) checkAccountBalance(ctx context.Context, tx pgx.T
 	var accountBalance float64
 	var err error
 	if account, err = p.AccountRepo.FindById(ctx, tx, paymentJob.AccountID); err != nil {
-		p.Logger.Error("failed to find account", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
+		p.Logger.Error("failed_to_find_account", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
 		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "failed to find account")
 		return models.Account{}, 0, err
 	}
 
 	if accountBalance, err = utils.DecryptToFloat64(account.Balance, p.AESKey); err != nil {
-		p.Logger.Error("failed to convert account balance to float64", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
+		p.Logger.Error("failed_to_convert_account_balance_to_float64", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
 		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "failed to convert account balance to float64")
 		return models.Account{}, 0, err
 	}
 	if (accountBalance - transactionAmount) < 0 {
-		p.Logger.Error("insufficient balance", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("account_balance", accountBalance), zap.Any("transaction_amount", transactionAmount))
+		p.Logger.Error("insufficient_balance", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("account_balance", accountBalance), zap.Any("transaction_amount", transactionAmount))
 		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "insufficient balance")
 		return models.Account{}, 0, ErrInsufficientBalance
 	}
@@ -199,7 +199,7 @@ func (p *PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob
 	}
 
 	if fraudStatus.IsEligibleForRetry {
-		p.Logger.Error("fraud analysis failed", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
+		p.Logger.Error("fraud_analysis_failed", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
 		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "fraud analysis failed, retying transaction")
 		// send to retry channel
 		p.RetryChan <- paymentJob
@@ -207,7 +207,7 @@ func (p *PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob
 		return ErrFraudAnalysisFailed
 	}
 
-	p.Logger.Error("suspicious transaction", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
+	p.Logger.Error("suspicious_transaction", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
 	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "suspicious transaction, no retry possible")
 	return ErrSuspiciousTransaction
 }
@@ -234,18 +234,19 @@ func (p *PaymentServiceConfig) processTransaction(ctx context.Context, paymentWG
 	case <-time.After(TransactionProcessingDelay):
 		// continue processing
 	}
+	statusChan <- TransactionStatus{EligibleForRetry: true, Err: errors.New("transaction failed due to simulated network traffic")}
+	/*
+		// simulate random failure
+		if int32(paymentJob.IdempotencyKey.ID()%RandomFailureDivisor) == 0 {
+			statusChan <- TransactionStatus{EligibleForRetry: false, Err: errors.New("transaction failed due to simulated account issue")}
+			return
+		}
 
-	// simulate random failure
-	if int32(paymentJob.IdempotencyKey.ID()%RandomFailureDivisor) == 0 {
-		statusChan <- TransactionStatus{EligibleForRetry: false, Err: errors.New("transaction failed due to simulated account issue")}
-		return
-	}
+		// simulate 10 minute network issue
+		if time.Now().Minute()%NetworkIssueModulo == 0 {
+			statusChan <- TransactionStatus{EligibleForRetry: true, Err: errors.New("transaction failed due to simulated network traffic")}
+			return
+		}
 
-	// simulate 10 minute network issue
-	if time.Now().Minute()%NetworkIssueModulo == 0 {
-		statusChan <- TransactionStatus{EligibleForRetry: true, Err: errors.New("transaction failed due to simulated network traffic")}
-		return
-	}
-
-	statusChan <- TransactionStatus{EligibleForRetry: false, Err: nil}
+		statusChan <- TransactionStatus{EligibleForRetry: false, Err: nil}*/
 }

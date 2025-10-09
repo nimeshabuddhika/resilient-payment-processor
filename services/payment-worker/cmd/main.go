@@ -24,7 +24,7 @@ func main() {
 	// Load config
 	cfg, err := configs.Load(logger)
 	if err != nil {
-		logger.Fatal("failed to load config", zap.Error(err))
+		logger.Fatal("failed_to_load_config", zap.Error(err))
 	}
 
 	// Initialize db
@@ -37,7 +37,7 @@ func main() {
 	}
 	db, disconnect, err := database.New(context.Background(), logger, dbConfig)
 	if err != nil {
-		logger.Fatal("failed to initialize database", zap.Error(err))
+		logger.Fatal("failed_to_initialize_database", zap.Error(err))
 	}
 	defer disconnect()
 
@@ -49,14 +49,14 @@ func main() {
 		Addr: cfg.RedisAddr,
 	})
 	if err != nil {
-		logger.Fatal("failed to initialize redis client", zap.Error(err))
+		logger.Fatal("failed_to_initialize_redis_client", zap.Error(err))
 	}
 	logger.Info("redis initialized")
 
 	// Initialize payment service dependencies
 	aesKey, err := utils.DecodeString(cfg.AesKey)
 	if err != nil {
-		logger.Fatal("failed to decode AES key", zap.Error(err))
+		logger.Fatal("failed_to_decode_AES key", zap.Error(err))
 	}
 
 	// Initialize retry channel
