@@ -159,7 +159,7 @@ func (p *PaymentServiceConfig) handlePaymentStatus(ctx context.Context, tx pgx.T
 		p.RetryChan <- paymentJob
 
 		p.Logger.Error("transaction failed, initiating retry process", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(transStatus.Err))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetying, "transaction failed, initiating retry process")
+		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "transaction failed, initiating retry process")
 		return transStatus.Err
 	}
 	// handle non-retryable payment error
@@ -200,7 +200,7 @@ func (p *PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob
 
 	if fraudStatus.IsEligibleForRetry {
 		p.Logger.Error("fraud analysis failed", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetying, "fraud analysis failed, retying transaction")
+		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "fraud analysis failed, retying transaction")
 		// send to retry channel
 		p.RetryChan <- paymentJob
 
@@ -214,12 +214,12 @@ func (p *PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob
 
 // updateOrderStatus updates the order status in the database and logs the outcome.
 func (p *PaymentServiceConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
-	err := p.OrderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyKey, status, message)
-	if err != nil {
+	if err := p.OrderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyKey, status, message); err != nil {
 		p.Logger.Error("failed to update order status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status))
-		// send to orderDLQ
+		// TODO: send to order DLQ if needed
+		return
 	}
-	p.Logger.Info("order status updated successfully", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Any("order_status", status))
+	p.Logger.Info("order status updated", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Any("order_status", status))
 }
 
 // processTransaction simulates the actual payment processing and reports status.
@@ -237,18 +237,15 @@ func (p *PaymentServiceConfig) processTransaction(ctx context.Context, paymentWG
 
 	// simulate random failure
 	if int32(paymentJob.IdempotencyKey.ID()%RandomFailureDivisor) == 0 {
-		p.Logger.Error("transaction failed, no retry attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey))
 		statusChan <- TransactionStatus{EligibleForRetry: false, Err: errors.New("transaction failed due to simulated account issue")}
 		return
 	}
 
 	// simulate 10 minute network issue
 	if time.Now().Minute()%NetworkIssueModulo == 0 {
-		p.Logger.Error("transaction failed, retry attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey))
 		statusChan <- TransactionStatus{EligibleForRetry: true, Err: errors.New("transaction failed due to simulated network traffic")}
 		return
 	}
 
-	p.Logger.Info("transaction processed successfully", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey))
 	statusChan <- TransactionStatus{EligibleForRetry: false, Err: nil}
 }

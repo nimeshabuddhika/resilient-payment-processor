@@ -14,8 +14,8 @@ const (
 type OrderStatus string
 
 const (
-	OrderStatusPending OrderStatus = "pending"
-	OrderStatusSuccess OrderStatus = "success"
-	OrderStatusRetying OrderStatus = "retrying"
-	OrderStatusFailed  OrderStatus = "failed"
+	OrderStatusPending  OrderStatus = "pending"
+	OrderStatusSuccess  OrderStatus = "success"
+	OrderStatusRetrying OrderStatus = "retrying"
+	OrderStatusFailed   OrderStatus = "failed"
 )
