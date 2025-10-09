@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	testutils "github.com/nimeshabuddhika/resilient-payment-processor/tests/utils"
 	"github.com/stretchr/testify/assert"
@@ -14,9 +15,11 @@ func TestCreateOrder_Success(t *testing.T) {
 	// Arrange
 	baseURL, stop := testutils.StartOrderAPIServer(t)
 	defer stop()
+	userID, accountID := testutils.GetSeededIDs()
 
 	payload := map[string]interface{}{
-		"accountId":       "acc-123",
+		"idempotencyId":   uuid.New().String(),
+		"accountId":       accountID.String(),
 		"amount":          42.5,
 		"currency":        "USD",
 		"timestamp":       time.Now(),
@@ -24,8 +27,10 @@ func TestCreateOrder_Success(t *testing.T) {
 		"transactionType": "PURCHASE",
 	}
 
+	headers := map[string]string{"userId": userID.String()}
+
 	// Act
-	resp, err := testutils.PostRequest(t, baseURL+"/api/v1/orders", payload)
+	resp, err := testutils.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
 	assert.NoError(t, err)
 
 	// Assert response
@@ -44,14 +49,18 @@ func TestCreateOrder_Success(t *testing.T) {
 func TestCreateOrder_InvalidAmount_Less_Than_minimum(t *testing.T) {
 	baseURL, stop := testutils.StartOrderAPIServer(t)
 	defer stop()
+	userID, accountID := testutils.GetSeededIDs()
 
-	// Missing required fields (accountId, amount, currency)
 	payload := map[string]interface{}{
-		"amount":   -10, // invalid
-		"currency": "USD",
+		"idempotencyId": uuid.New().String(),
+		"accountId":     accountID.String(),
+		"amount":        -10, // invalid
+		"currency":      "USD",
 	}
 
-	resp, err := testutils.PostRequest(t, baseURL+"/api/v1/orders", payload)
+	headers := map[string]string{"userId": userID.String()}
+
+	resp, err := testutils.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
 	assert.NoError(t, err)
 
 	// Assert response
@@ -64,7 +73,7 @@ func TestCreateOrder_InvalidAmount_Less_Than_minimum(t *testing.T) {
 	out, err := testutils.DecodeError(resp.Body)
 
 	assert.NoError(t, err)
-	assert.Equal(t, string(pkg.ErrInvalidInput), out.Code)
+	assert.Equal(t, pkg.ErrInvalidInputCode.Code, out.Code)
 	assert.NotEmpty(t, out.Message)
 	assert.NotEmpty(t, out.Details)
 }
