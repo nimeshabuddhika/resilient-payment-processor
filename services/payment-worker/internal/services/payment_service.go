@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -65,6 +66,13 @@ func NewPaymentProcessor(conf PaymentProcessorConfig) PaymentProcessor {
 // ProcessPayment orchestrates the end-to-end payment flow for a single job.
 // It handles decryption, fraud detection, transaction processing, balance updates, and state management.
 func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job views.PaymentJob) error {
+	// Acquire lock on account to prevent race conditions
+	lockKey := fmt.Sprintf("lock:account:%s", job.AccountID.String()) // Use UUID as string
+	locked, err := p.RedisClient.SetNX(ctx, lockKey, "locked", 20*time.Second).Result()
+	if err != nil {
+		p.Logger.Error("Failed to acquire lock", zap.Error(err))
+		return err
+	}
 	// Begin database transaction
 	tx, err := p.DB.Begin(ctx)
 	if err != nil {
@@ -79,6 +87,15 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job views.P
 			p.Logger.Info("Database transaction committed successfully")
 		}
 	}()
+
+	if !locked {
+		p.Logger.Info("Account locked by another process", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
+		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "Account locked by another process")
+		p.RetryChannel <- job // send to retry order topic
+		return fmt.Errorf("account locked by another process")
+	}
+	defer p.RedisClient.Del(ctx, lockKey) // Release after
+	p.Logger.Info("Lock acquired successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
 
 	// Decrypt transaction amount
 	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.EncryptionKey)
@@ -153,18 +170,18 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job views.P
 }
 
 // handleTransactionResult updates the order status and retry flow based on the transaction outcome.
-func (p *PaymentProcessorConfig) handleTransactionResult(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, result TransactionResult) error {
+func (p *PaymentProcessorConfig) handleTransactionResult(ctx context.Context, tx pgx.Tx, job views.PaymentJob, result TransactionResult) error {
 	if result.Error == nil {
 		return nil
 	}
 	if result.EligibleForRetry {
-		p.RetryChannel <- paymentJob
-		p.Logger.Error("Transaction failed, initiating retry", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(result.Error))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "Retrying due to transient failure")
+		p.RetryChannel <- job
+		p.Logger.Error("Transaction failed, initiating retry", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(result.Error))
+		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "Retrying due to transient failure")
 		return result.Error
 	}
-	p.Logger.Error("Transaction failed, no retry attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(result.Error))
-	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "Non-retryable failure occurred")
+	p.Logger.Error("Transaction failed, no retry attempt", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(result.Error))
+	p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "Non-retryable failure occurred")
 	return result.Error
 }
 
@@ -195,18 +212,18 @@ func (p *PaymentProcessorConfig) checkAccountBalance(ctx context.Context, tx pgx
 }
 
 // handleFraudResult routes the payment for retry or failure based on the fraud analysis report.
-func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, paymentJob views.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
+func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job views.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
 	if fraudStatus.FraudFlag == FraudFlagClean {
 		return nil
 	}
 	if fraudStatus.IsEligibleForRetry {
-		p.Logger.Error("Fraud detection failed", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "Retrying due to fraud detection failure")
-		p.RetryChannel <- paymentJob
+		p.Logger.Error("Fraud detection failed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
+		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "Retrying due to fraud detection failure")
+		p.RetryChannel <- job
 		return ErrFraudDetectionFailed
 	}
-	p.Logger.Error("Suspicious transaction detected", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
-	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "Suspicious transaction detected")
+	p.Logger.Error("Suspicious transaction detected", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
+	p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "Suspicious transaction detected")
 	return ErrSuspiciousTransaction
 }
 
