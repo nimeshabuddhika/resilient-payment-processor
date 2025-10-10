@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/cache"
@@ -39,7 +40,7 @@ func main() {
 	}
 	db, disconnect, err := database.New(context.Background(), logger, dbConfig)
 	if err != nil {
-		logger.Fatal("failedToInitializeDatabase", zap.Error(err))
+		logger.Fatal("Failed to load configuration", zap.Error(err))
 	}
 	defer disconnect() // Ensure database connections are closed on shutdown
 
@@ -52,14 +53,14 @@ func main() {
 		Addr: cfg.RedisAddr,
 	})
 	if err != nil {
-		logger.Fatal("failedToInitializeRedisClient", zap.Error(err))
+		logger.Fatal("Failed to initialize database", zap.Error(err))
 	}
-	logger.Info("redisClientInitializedSuccessfully")
+	logger.Info("Redis client initialized successfully")
 
 	// Decode encryption key to byte array
 	aesKey, err := utils.DecodeString(cfg.AesKey)
 	if err != nil {
-		logger.Fatal("failed_to_decode_AES key", zap.Error(err))
+		logger.Fatal("Failed to decode encryption key", zap.Error(err))
 	}
 
 	// Initialize retry channel for failed payment jobs
@@ -109,11 +110,14 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	osSignal := <-sigChan
-	logger.Info("receivedShutdownSignal", zap.String("signal", osSignal.String()))
+	logger.Info("Received shutdown signal", zap.String("signal", osSignal.String()))
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 	cancel() // Trigger context cancellation
 	closeOrderConsumer()
 	redisCloser()
 	closeRetryHandler()
 	close(retryChannel) // Close retry channel to stop retry handler
-	logger.Info("serviceShutdownCompleted")
+	<-shutdownCtx.Done()
+	logger.Info("Service shutdown completed successfully")
 }
