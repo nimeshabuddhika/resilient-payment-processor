@@ -14,12 +14,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewApp is an exported helper that delegates to the shared app constructor.
-// It exists here to make the router/app creation callable from this package as requested.
-func NewApp(ctx context.Context, logger *zap.Logger) (*http.Server, func(), error) {
-	return appsvc.NewApp(ctx, logger)
-}
+// @title Order API
+// @version 1.0
+// @description API for accepting orders, validating account balances, and publishing events to Kafka for payment processing in the resilient payment processor system. This service handles order creation with resilience patterns for high-volume, event-driven workflows.
+// @contact.url https://github.com/nimeshabuddhika
+// @license.name MIT License
+// @host localhost:8000
+// @BasePath /api/v1
 
+// @schemes http
+
+// @in header
+// @name userId
+// @description User UUID for demo authentication (TODO: replace with JWT)
 func main() {
 	// Initialize logger
 	pkg.InitLogger()

@@ -251,7 +251,18 @@ func seedDB(t *testing.T, dsnNoProto string) {
 	}
 }
 
-func startKafkaForTests() (bootstrap string, terminate func(), err error) {
+// EnsureKafkaTopic exposes ensureKafkaTopic for other test packages.
+func EnsureKafkaTopic(t *testing.T, bootstrap, topic string, partitions int) {
+	ensureKafkaTopic(t, bootstrap, topic, partitions)
+}
+
+// StartPostgresForTests exposes startPostgresForTests for other test packages.
+func StartPostgresForTests() (dsnNoProto string, terminate func(), err error) {
+	return startPostgresForTests()
+}
+
+// StartKafkaForTests exports the Kafka test container starter for reuse in other integration tests.
+func StartKafkaForTests() (bootstrap string, terminate func(), err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -289,6 +300,11 @@ func startKafkaForTests() (bootstrap string, terminate func(), err error) {
 	return
 }
 
+// Backward-compatible unexported wrapper used by StartOrderAPIServer
+func startKafkaForTests() (bootstrap string, terminate func(), err error) {
+	return StartKafkaForTests()
+}
+
 func ensureKafkaTopic(t *testing.T, bootstrap, topic string, partitions int) {
 	admin, err := ckafka.NewAdminClient(&ckafka.ConfigMap{"bootstrap.servers": bootstrap})
 	if err != nil {
@@ -314,6 +330,47 @@ func getFreePort() (int, error) {
 	}
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+// StartRedisForTests spins up a Redis container and returns host:port and a terminate function.
+func StartRedisForTests() (addr string, terminate func(), err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	req := testcontainers.ContainerRequest{
+		Image:        "redis:7-alpine",
+		ExposedPorts: []string{"6379/tcp"},
+		WaitingFor:   wait.ForListeningPort("6379/tcp").WithStartupTimeout(60 * time.Second),
+	}
+	rc, e := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if e != nil {
+		err = fmt.Errorf("failed to start redis test container: %w", e)
+		return
+	}
+
+	host, e := rc.Host(ctx)
+	if e != nil {
+		_ = rc.Terminate(context.Background())
+		err = fmt.Errorf("failed to get redis host: %w", e)
+		return
+	}
+	mapped, e := rc.MappedPort(ctx, "6379/tcp")
+	if e != nil {
+		_ = rc.Terminate(context.Background())
+		err = fmt.Errorf("failed to get redis mapped port: %w", e)
+		return
+	}
+	addr = fmt.Sprintf("%s:%s", host, mapped.Port())
+
+	terminate = func() {
+		ctx, c := context.WithTimeout(context.Background(), 30*time.Second)
+		defer c()
+		_ = rc.Terminate(ctx)
+	}
+	return
 }
 
 func waitForReady(ctx context.Context, url string) error {

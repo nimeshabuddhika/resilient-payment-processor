@@ -10,8 +10,11 @@ import (
 	middleware "github.com/nimeshabuddhika/resilient-payment-processor/pkg/middlewares"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
+	_ "github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/docs"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/handlers"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
+	"github.com/swaggo/files"
+	"github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
 )
 
@@ -53,6 +56,9 @@ func NewApp(ctx context.Context, logger *zap.Logger) (*http.Server, func(), erro
 
 	// Router
 	r := gin.Default()
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	api := r.Group("/api/v1")
 	api.Use(middleware.TraceID(logger))
 	api.Use(middleware.Metrics())

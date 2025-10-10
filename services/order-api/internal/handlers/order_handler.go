@@ -26,6 +26,18 @@ func (h *OrderHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/orders", h.CreateOrder)
 }
 
+// CreateOrder creates a new order.
+// @Summary Create a new order
+// @Description Creates an order and publishes to Kafka if valid. The userId in the header is for demo only (TODO: replace with JWT)
+// @Router /orders [post]
+// @Tags orders
+// @Accept json
+// @Produce json
+// @Param userId header string true "User UUID".
+// @Param body body views.OrderRequest true "Order details"
+// @Success 201 {string} true "Order created"
+// @Failure 400 {string} true "Invalid input"
+// @Failure 500 {string} true "Internal server error"
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	traceID, err := utils.GetTraceID(c)
 	if err != nil {
