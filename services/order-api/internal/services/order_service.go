@@ -64,13 +64,13 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 			return pkg.HandleSQLError(traceId, s.logger, err)
 		}
 		if exists {
-			s.logger.Warn("idempotency_key_already_exists",
+			s.logger.Warn("idempotency key already exists",
 				zap.String(pkg.TraceId, traceId),
-				zap.String(pkg.IdempotencyKey, req.IdempotencyID.String()))
+				zap.String("idempotencyKey", req.IdempotencyID.String()))
 			return pkg.NewAppError(pkg.ErrIdempotencyConflictCode, "idempotency key already exists", nil)
 		}
 		// Get account
-		account, err := s.accountRepo.FindById(ctx, tx, req.AccountID)
+		account, err := s.accountRepo.FindByID(ctx, tx, req.AccountID)
 		if err != nil {
 			return pkg.HandleSQLError(traceId, s.logger, err)
 		}
@@ -78,26 +78,26 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		// decrypt balance
 		accountBalanceStr, err := utils.DecryptAES(account.Balance, s.aesKey) // TODO: use a key manager or call user-api to get the balance
 		if err != nil {
-			s.logger.Error("failed_to_decrypt_balance", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			s.logger.Error("failed to decrypt balance", zap.String(pkg.TraceId, traceId), zap.Error(err))
 			return pkg.NewAppError(pkg.ErrServerCode, "decryption failed", err)
 		}
 		// convert `accountBalanceStr` to float64
 		accountBalance, err := utils.ToFloat64(accountBalanceStr)
 		if err != nil {
-			s.logger.Error("failed_to_convert_balance_to_float64", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			s.logger.Error("failed to convert balance to float64", zap.String(pkg.TraceId, traceId), zap.Error(err))
 			return pkg.NewAppError(pkg.ErrServerCode, "parse failed", err)
 		}
 
 		// Check balance
 		if accountBalance < req.Amount {
-			s.logger.Warn("insufficient_balance", zap.String(pkg.TraceId, traceId))
-			return pkg.NewAppError(pkg.ErrInsufficientFundsCode, "insufficient_balance", pkg.ErrInsufficientBalance)
+			s.logger.Warn("insufficient balance", zap.String(pkg.TraceId, traceId))
+			return pkg.NewAppError(pkg.ErrInsufficientFundsCode, "insufficient balance", pkg.ErrInsufficientBalance)
 		}
 
 		//encrypt transaction amount
 		encAmount, err := utils.EncryptAES(utils.Float64ToByte(req.Amount), s.aesKey)
 		if err != nil {
-			s.logger.Error("failed_to_encrypt_transaction_amount", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			s.logger.Error("failed to encrypt transaction amount", zap.String(pkg.TraceId, traceId), zap.Error(err))
 			return pkg.NewAppError(pkg.ErrServerCode, "encryption failed", err)
 		}
 		order.Amount = encAmount
@@ -119,6 +119,6 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		s.logger.Error("failed to publish order", zap.String(pkg.TraceId, traceId), zap.Error(err))
 		// TODO: Enqueue for retry or DLQ; don't fail API
 	}
-	s.logger.Info("order_created_successfully", zap.String(pkg.TraceId, traceId), zap.String("order_id", order.ID.String()))
+	s.logger.Info("order created successfully", zap.String(pkg.TraceId, traceId), zap.String("order_id", order.ID.String()))
 	return order.ID.String(), nil
 }

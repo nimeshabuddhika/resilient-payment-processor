@@ -19,32 +19,32 @@ import (
 	"go.uber.org/zap"
 )
 
-// PaymentService processes incoming payment jobs end-to-end.
-type PaymentService interface {
-	HandlePayment(ctx context.Context, paymentJob views.PaymentJob) error
+// PaymentProcessor defines the interface for processing payment jobs end-to-end.
+type PaymentProcessor interface {
+	ProcessPayment(ctx context.Context, paymentJob views.PaymentJob) error
 }
 
-// Domain-level tuning constants and shared errors for the payment service.
+// Domain-level constants and shared errors for the payment service.
 const (
 	TransactionProcessingDelay = 5 * time.Second
 	RandomFailureDivisor       = 4
-	NetworkIssueModulo         = 5
+	NetworkFailureModulo       = 10 // indicates network-related failure check
 )
 
 var (
-	ErrInsufficientBalance   = errors.New("insufficient balance")
-	ErrFraudAnalysisFailed   = errors.New("fraud analysis failed")
+	ErrInsufficientFunds     = errors.New("insufficient balance")
+	ErrFraudDetectionFailed  = errors.New("fraud analysis failed")
 	ErrSuspiciousTransaction = errors.New("suspicious transaction")
 )
 
-// TransactionStatus represents the outcome of a transaction attempt.
-type TransactionStatus struct {
+// TransactionResult represents the outcome of a transaction attempt.
+type TransactionResult struct {
 	EligibleForRetry bool
-	Err              error
+	Error            error
 }
 
-// PaymentServiceConfig groups all dependencies required by the payment service.
-type PaymentServiceConfig struct {
+// PaymentProcessorConfig groups all dependencies required by the payment service.
+type PaymentProcessorConfig struct {
 	Logger        *zap.Logger
 	Config        *configs.Config
 	AccountRepo   repositories.AccountRepository
@@ -53,200 +53,197 @@ type PaymentServiceConfig struct {
 	DB            *database.DB
 	RedisClient   *redis.Client
 	FraudDetector FraudDetector
-	AESKey        []byte
-	RetryChan     chan<- views.PaymentJob
+	EncryptionKey []byte
+	RetryChannel  chan<- views.PaymentJob
 }
 
-// NewPaymentService constructs a PaymentService with the given configuration.
-func NewPaymentService(conf PaymentServiceConfig) PaymentService {
+// NewPaymentProcessor constructs a PaymentProcessor with the given configuration.
+func NewPaymentProcessor(conf PaymentProcessorConfig) PaymentProcessor {
 	return &conf
 }
 
-// HandlePayment orchestrates the end-to-end payment flow for a single job.
-// It performs decryption, fraud analysis, transaction processing, and state updates.
-func (p *PaymentServiceConfig) HandlePayment(ctx context.Context, job views.PaymentJob) error {
-	// Begin transaction
+// ProcessPayment orchestrates the end-to-end payment flow for a single job.
+// It handles decryption, fraud detection, transaction processing, balance updates, and state management.
+func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job views.PaymentJob) error {
+	// Begin database transaction
 	tx, err := p.DB.Begin(ctx)
 	if err != nil {
-		p.Logger.Error("failed_to_begin_transaction", zap.Error(err))
+		p.Logger.Error("failedToBeginTransaction", zap.Error(err))
 		return err
 	}
 	defer func() {
-		transErr := p.DB.Commit(ctx, tx)
-		p.Logger.Info("transaction_committed", zap.Error(transErr))
+		commitErr := p.DB.Commit(ctx, tx)
+		if commitErr != nil {
+			p.Logger.Error("failedToCommitTransaction", zap.Error(commitErr))
+		} else {
+			p.Logger.Info("transactionCommittedSuccessfully")
+		}
 	}()
 
-	//decrypt transaction amount
-	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.AESKey)
+	// Decrypt transaction amount
+	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.EncryptionKey)
 	if err != nil {
-		p.Logger.Error("failed_to_decrypt_transaction_amount", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
-		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "failed to decrypt transaction amount")
+		p.Logger.Error("failedToDecryptTransactionAmount", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "decryption of transaction amount failed")
 		return err
 	}
 
-	// Check if the transaction is fraudulent
+	// Perform fraud detection asynchronously
 	var fraudWG sync.WaitGroup
 	fraudWG.Add(1)
 	fraudStatusChan := make(chan FraudStatus, 1)
 	go p.FraudDetector.Analyze(ctx, &fraudWG, fraudStatusChan, transactionAmount, job)
 
-	// Acquire redis lock for balance holds
-
-	// Check if balance is enough to process transaction
-
+	// Check account balance
 	_, accountBalance, err := p.checkAccountBalance(ctx, tx, job, transactionAmount)
 	if err != nil {
 		return err
 	}
 
-	// Wait for fraud analysis to complete
-	p.Logger.Info("waiting_for_fraud_analysis_to_complete", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	// Wait for fraud analysis completion
+	p.Logger.Info("waitingForFraudAnalysis", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 	fraudWG.Wait()
 	close(fraudStatusChan)
 
 	// Handle fraud report
 	fraudStatus := <-fraudStatusChan
-	err = p.handleFraudReport(ctx, job, fraudStatus, tx)
+	err = p.handleFraudResult(ctx, job, fraudStatus, tx)
 	if err != nil {
 		return err
 	}
-	p.Logger.Info("transaction_is_not_fraudulent", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
+	p.Logger.Info("fraudCheckPassed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
 
-	// process transaction
+	// Process transaction asynchronously
 	var paymentWG sync.WaitGroup
 	paymentWG.Add(1)
-	paymentStatusChan := make(chan TransactionStatus, 1)
-	// Initiate payment processing
-	go p.processTransaction(ctx, &paymentWG, paymentStatusChan, transactionAmount, job)
+	paymentResultChan := make(chan TransactionResult, 1)
+	go p.processTransaction(ctx, &paymentWG, paymentResultChan, transactionAmount, job)
 
-	// wait for payment processing to complete
-	p.Logger.Info("waiting_for_payment_processing_to_complete", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	// Wait for transaction processing
+	p.Logger.Info("waitingForTransactionProcessing", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 	paymentWG.Wait()
-	close(paymentStatusChan)
+	close(paymentResultChan)
 
-	// Read payment status
-	transStatus := <-paymentStatusChan
-	err = p.handlePaymentStatus(ctx, tx, job, transStatus)
+	// Handle transaction result
+	result := <-paymentResultChan
+	err = p.handleTransactionResult(ctx, tx, job, result)
 	if err != nil {
 		return err
 	}
+	p.Logger.Info("transactionProcessedSuccessfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 
-	p.Logger.Info("payment_processed_successfully_updating_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
-
-	// update account balance
+	// Update account balance
 	newBalance := accountBalance - transactionAmount
-	newBalanceEnc, _ := utils.EncryptAES(utils.Float64ToByte(newBalance), p.AESKey)
-	err = p.UserRepo.UpdateBalanceByAccountId(ctx, tx, job.AccountID, newBalanceEnc)
+	encryptedBalance, err := utils.EncryptAES(utils.Float64ToByte(newBalance), p.EncryptionKey)
 	if err != nil {
-		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
-		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "failed to update account balance")
+		p.Logger.Error("failedToEncryptNewBalance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "encryption of new balance failed")
+		return err
+	}
+	if err = p.UserRepo.UpdateBalanceByAccountID(ctx, tx, job.AccountID, encryptedBalance); err != nil {
+		p.Logger.Error("failedToUpdateAccountBalance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "balance update failed")
 		return err
 	}
 
-	p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusSuccess, "payment processed successfully")
+	p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusSuccess, "payment completed successfully")
 
-	// release redis lock and pending balance
+	// TODO: Implement Redis lock release logic
 	return nil
 }
 
-// handlePaymentStatus updates the order and retry flow based on transaction outcome.
-func (p *PaymentServiceConfig) handlePaymentStatus(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transStatus TransactionStatus) error {
-	// handle success payment
-	if transStatus.Err == nil {
+// handleTransactionResult updates the order and retry flow based on transaction outcome.
+func (p *PaymentProcessorConfig) handleTransactionResult(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, result TransactionResult) error {
+	if result.Error == nil {
 		return nil
-	} else if transStatus.EligibleForRetry { // handle retryable payment error
-		// send it to retry channel
-		p.RetryChan <- paymentJob
-
-		p.Logger.Error("transaction_failed_initiating_retry_process", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(transStatus.Err))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "transaction failed, initiating retry process")
-		return transStatus.Err
 	}
-	// handle non-retryable payment error
-	p.Logger.Error("transaction_failed_no_retry_attempt", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(transStatus.Err))
-	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "transaction failed, no retry possible")
-	return transStatus.Err
+	if result.EligibleForRetry {
+		p.RetryChannel <- paymentJob
+		p.Logger.Error("transactionFailedInitiatingRetry", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(result.Error))
+		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "retrying due to transient failure")
+		return result.Error
+	}
+	p.Logger.Error("transactionFailedNoRetry", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(result.Error))
+	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "non-retryable failure occurred")
+	return result.Error
 }
 
-// checkAccountBalance ensures the account has sufficient funds for the transaction.
-func (p *PaymentServiceConfig) checkAccountBalance(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transactionAmount float64) (models.Account, float64, error) {
+// checkAccountBalance verifies if the account has sufficient funds for the transaction.
+func (p *PaymentProcessorConfig) checkAccountBalance(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transactionAmount float64) (models.Account, float64, error) {
 	var account models.Account
-	var accountBalance float64
+	var balance float64
 	var err error
-	if account, err = p.AccountRepo.FindById(ctx, tx, paymentJob.AccountID); err != nil {
-		p.Logger.Error("failed_to_find_account", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "failed to find account")
+	account, err = p.AccountRepo.FindByID(ctx, tx, paymentJob.AccountID)
+	if err != nil {
+		p.Logger.Error("failedToFindAccount", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
+		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "account not found")
 		return models.Account{}, 0, err
 	}
 
-	if accountBalance, err = utils.DecryptToFloat64(account.Balance, p.AESKey); err != nil {
-		p.Logger.Error("failed_to_convert_account_balance_to_float64", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "failed to convert account balance to float64")
+	balance, err = utils.DecryptToFloat64(account.Balance, p.EncryptionKey)
+	if err != nil {
+		p.Logger.Error("failedToDecryptAccountBalance", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
+		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "balance decryption failed")
 		return models.Account{}, 0, err
 	}
-	if (accountBalance - transactionAmount) < 0 {
-		p.Logger.Error("insufficient_balance", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("account_balance", accountBalance), zap.Any("transaction_amount", transactionAmount))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "insufficient balance")
-		return models.Account{}, 0, ErrInsufficientBalance
+	if (balance - transactionAmount) < 0 {
+		p.Logger.Error("insufficientFundsDetected", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Float64("accountBalance", balance), zap.Float64("transactionAmount", transactionAmount))
+		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "insufficient funds")
+		return models.Account{}, 0, ErrInsufficientFunds
 	}
-	return account, accountBalance, nil
+	return account, balance, nil
 }
 
-// handleFraudReport routes the payment for retry or failure based on the fraud analysis report.
-func (p *PaymentServiceConfig) handleFraudReport(ctx context.Context, paymentJob views.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
+// handleFraudResult routes the payment for retry or failure based on the fraud analysis report.
+func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, paymentJob views.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
 	if fraudStatus.FraudFlag == FraudFlagClean {
 		return nil
 	}
-
 	if fraudStatus.IsEligibleForRetry {
-		p.Logger.Error("fraud_analysis_failed", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
-		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "fraud analysis failed, retying transaction")
-		// send to retry channel
-		p.RetryChan <- paymentJob
-
-		return ErrFraudAnalysisFailed
+		p.Logger.Error("fraudDetectionFailed", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
+		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusRetrying, "retrying due to fraud detection failure")
+		p.RetryChannel <- paymentJob
+		return ErrFraudDetectionFailed
 	}
-
-	p.Logger.Error("suspicious_transaction", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
-	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "suspicious transaction, no retry possible")
+	p.Logger.Error("suspiciousTransactionDetected", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Any("report", fraudStatus))
+	p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "suspicious transaction detected")
 	return ErrSuspiciousTransaction
 }
 
 // updateOrderStatus updates the order status in the database and logs the outcome.
-func (p *PaymentServiceConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
+func (p *PaymentProcessorConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
 	if err := p.OrderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyKey, status, message); err != nil {
-		p.Logger.Error("failed to update order status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status))
-		// TODO: send to order DLQ if needed
+		p.Logger.Error("failedToUpdateOrderStatus", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("orderStatus", status))
+		// TODO: Implement order DLQ logic
 		return
 	}
-	p.Logger.Info("order status updated", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Any("order_status", status))
+	p.Logger.Info("orderStatusUpdatedSuccessfully", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Any("orderStatus", status))
 }
 
-// processTransaction simulates the actual payment processing and reports status.
-func (p *PaymentServiceConfig) processTransaction(ctx context.Context, paymentWG *sync.WaitGroup, statusChan chan TransactionStatus, _ float64, paymentJob views.PaymentJob) {
+// processTransaction simulates the actual payment processing and reports the result.
+func (p *PaymentProcessorConfig) processTransaction(ctx context.Context, paymentWG *sync.WaitGroup, resultChan chan TransactionResult, amount float64, paymentJob views.PaymentJob) {
 	defer paymentWG.Done()
 
-	// simulate processing time with context cancellation support
+	// Simulate processing time with context cancellation support
 	select {
 	case <-ctx.Done():
-		statusChan <- TransactionStatus{EligibleForRetry: true, Err: ctx.Err()}
+		resultChan <- TransactionResult{EligibleForRetry: true, Error: ctx.Err()}
 		return
 	case <-time.After(TransactionProcessingDelay):
-		// continue processing
+		// Continue with processing
 	}
-	statusChan <- TransactionStatus{EligibleForRetry: true, Err: errors.New("transaction failed due to simulated network traffic")}
-	/*
-		// simulate random failure
-		if int32(paymentJob.IdempotencyKey.ID()%RandomFailureDivisor) == 0 {
-			statusChan <- TransactionStatus{EligibleForRetry: false, Err: errors.New("transaction failed due to simulated account issue")}
-			return
-		}
 
-		// simulate 10 minute network issue
-		if time.Now().Minute()%NetworkIssueModulo == 0 {
-			statusChan <- TransactionStatus{EligibleForRetry: true, Err: errors.New("transaction failed due to simulated network traffic")}
-			return
-		}
+	// Simulate random failure
+	if int32(paymentJob.IdempotencyKey.ID()%RandomFailureDivisor) == 0 {
+		resultChan <- TransactionResult{EligibleForRetry: false, Error: errors.New("transaction failed due to simulated account issue")}
+		return
+	}
 
-		statusChan <- TransactionStatus{EligibleForRetry: false, Err: nil}*/
+	// Simulate network-related failure
+	if time.Now().Minute()%NetworkFailureModulo == 0 {
+		resultChan <- TransactionResult{EligibleForRetry: true, Error: errors.New("transaction failed due to simulated network issue")}
+		return
+	}
+
+	resultChan <- TransactionResult{EligibleForRetry: false, Error: nil}
 }

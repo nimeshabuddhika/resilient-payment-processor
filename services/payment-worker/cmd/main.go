@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/cache"
@@ -14,21 +17,20 @@ import (
 	"go.uber.org/zap"
 )
 
-// main function to start the payment-worker service
+// main initializes and runs the payment worker service.
 func main() {
-	// Initialize logger
+	// Initialize global logger with default configuration
 	pkg.InitLogger()
 	logger := pkg.Logger
-	defer logger.Sync()
+	defer logger.Sync() // Ensure all buffered logs are flushed on exit
 
-	// Load config
+	// Load configuration from environment and optional config file
 	cfg, err := configs.Load(logger)
 	if err != nil {
 		logger.Fatal("failed_to_load_config", zap.Error(err))
 	}
 
-	// Initialize db
-	// Initialize postgres db
+	// Initialize PostgreSQL database connection
 	dbConfig := database.Config{
 		PrimaryDSN:  cfg.PrimaryDbAddr,
 		ReplicaDSNs: []string{cfg.ReplicaDbAddr},
@@ -37,34 +39,35 @@ func main() {
 	}
 	db, disconnect, err := database.New(context.Background(), logger, dbConfig)
 	if err != nil {
-		logger.Fatal("failed_to_initialize_database", zap.Error(err))
+		logger.Fatal("failedToInitializeDatabase", zap.Error(err))
 	}
-	defer disconnect()
+	defer disconnect() // Ensure database connections are closed on shutdown
 
+	// Create a context that can be canceled for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize redis client
+	// Initialize Redis client for caching and locking
 	redisClient, redisCloser, err := cache.New(ctx, cache.Config{
 		Addr: cfg.RedisAddr,
 	})
 	if err != nil {
-		logger.Fatal("failed_to_initialize_redis_client", zap.Error(err))
+		logger.Fatal("failedToInitializeRedisClient", zap.Error(err))
 	}
-	logger.Info("redis initialized")
+	logger.Info("redisClientInitializedSuccessfully")
 
-	// Initialize payment service dependencies
+	// Decode encryption key to byte array
 	aesKey, err := utils.DecodeString(cfg.AesKey)
 	if err != nil {
 		logger.Fatal("failed_to_decode_AES key", zap.Error(err))
 	}
 
-	// Initialize retry channel
-	retryChan := make(chan views.PaymentJob)
-	// initialize repositories
+	// Initialize retry channel for failed payment jobs
+	retryChannel := make(chan views.PaymentJob)
+	// Initialize repositories for data access
 	orderRepo := repositories.NewOrderRepository()
-
-	paymentSvc := services.NewPaymentService(services.PaymentServiceConfig{
+	// Configure and instantiate the payment processor
+	paymentProcessor := services.NewPaymentProcessor(services.PaymentProcessorConfig{
 		Logger:      logger,
 		Config:      cfg,
 		AccountRepo: repositories.NewAccountRepository(),
@@ -76,33 +79,41 @@ func main() {
 			Logger: logger,
 			Cnf:    cfg,
 		}),
-		AESKey:    aesKey,
-		RetryChan: retryChan,
+		EncryptionKey: aesKey,
+		RetryChannel:  retryChannel,
 	})
 
-	// Initialize kafka retry handler
+	// Set up Kafka retry handler
 	retryHandler := services.NewKafkaRetryHandler(services.KafkaRetryConfig{
-		Context:        ctx,
-		Logger:         logger,
-		Config:         cfg,
-		RetryChan:      retryChan,
-		PaymentService: paymentSvc,
-		DB:             db,
-		OrderRepo:      orderRepo,
+		Context:          ctx,
+		Logger:           logger,
+		Config:           cfg,
+		RetryChannel:     retryChannel,
+		PaymentProcessor: paymentProcessor,
+		DB:               db,
+		OrderRepo:        orderRepo,
 	})
 	closeRetryHandler := retryHandler.Start()
 
-	// Initialize kafka order consumer
+	// Set up Kafka order consumer
 	orderHandler := services.NewKafkaOrderConsumer(services.KafkaOrderConfig{
-		Logger:         logger,
-		Config:         cfg,
-		PaymentService: paymentSvc,
+		Context:          ctx,
+		Logger:           logger,
+		Config:           cfg,
+		PaymentProcessor: paymentProcessor,
 	})
-	closeOrderConsumer := orderHandler.Consume(ctx)
+	closeOrderConsumer := orderHandler.Start()
 
-	<-ctx.Done()
-	closeOrderConsumer() //Close kafka order consumer
+	// Handle graceful shutdown on SIGINT or SIGTERM
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	osSignal := <-sigChan
+	logger.Info("receivedShutdownSignal", zap.String("signal", osSignal.String()))
+	cancel() // Trigger context cancellation
+	closeOrderConsumer()
 	redisCloser()
 	closeRetryHandler()
-	close(retryChan) // Close retry channel to stop retry handler
+	close(retryChannel) // Close retry channel to stop retry handler
+	logger.Info("serviceShutdownCompleted")
 }

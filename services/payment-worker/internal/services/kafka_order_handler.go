@@ -13,187 +13,165 @@ import (
 	"go.uber.org/zap"
 )
 
-// KafkaOrderHandler is an interface for consuming messages from Kafka.
+// KafkaOrderHandler defines the interface for consuming messages from Kafka topics.
 type KafkaOrderHandler interface {
-	Consume(ctx context.Context) func()
+	Start() func()
 }
 
 // KafkaOrderConfig holds configuration and dependencies for the Kafka order consumer.
 type KafkaOrderConfig struct {
-	Logger         *zap.Logger
-	Config         *configs.Config
-	consumer       *kafka.Consumer
-	PaymentService PaymentService
-	dlqProducer    *kafka.Producer
-	validate       *validator.Validate
+	Context          context.Context
+	Logger           *zap.Logger
+	Config           *configs.Config
+	PaymentProcessor PaymentProcessor
+
+	// internal initialization
+	consumer    *kafka.Consumer
+	dlqProducer *kafka.Producer
+	validate    *validator.Validate
+	orderSem    chan struct{} // Semaphore to limit concurrent order processing
 }
 
-// NewKafkaOrderConsumer creates and initializes a KafkaOrderHandler with the provided logger and configuration parameters.
+// NewKafkaOrderConsumer initializes a KafkaOrderHandler with the provided configuration.
+// It sets up the Kafka consumer, DLQ producer, and semaphore based on config values.
 func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
+	// Configure Kafka consumer settings
 	kafkaConfig := &kafka.ConfigMap{
-		"bootstrap.servers":  cfg.Config.KafkaBrokers,       // Kafka broker(s)
-		"group.id":           cfg.Config.KafkaConsumerGroup, // Consumer group
-		"auto.offset.reset":  "earliest",                    // Start from the beginning of the topic
-		"enable.auto.commit": false,                         // Disable auto commit
+		"bootstrap.servers":  cfg.Config.KafkaBrokers,       // List of Kafka broker addresses
+		"group.id":           cfg.Config.KafkaConsumerGroup, // Consumer group ID for load balancing
+		"auto.offset.reset":  "earliest",                    // Start reading from the earliest offset if no prior offset
+		"enable.auto.commit": false,                         // Disable auto-commit for manual offset management
 	}
 	kafkaConsumer, err := kafka.NewConsumer(kafkaConfig)
 	if err != nil {
-		cfg.Logger.Fatal("failed to create kafka consumer", zap.Error(err))
+		cfg.Logger.Fatal("failedToCreateKafkaOrderConsumer", zap.Error(err))
 	}
 
-	// Create a DLQ producer
+	// Initialize DLQ producer for failed messages
 	dlqProducer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers,
-		"enable.idempotence": true,
+		"enable.idempotence": true, // Ensure messages are not duplicated
 	})
 	if err != nil {
-		cfg.Logger.Fatal("failed_to_create_dlq_producer", zap.Error(err))
+		cfg.Logger.Fatal("failedToCreateDlqProducer", zap.Error(err))
 	}
 
+	// Initialize semaphore with configured max concurrent jobs
+	cfg.orderSem = make(chan struct{}, cfg.Config.MaxOrdersPlacedConcurrentJobs)
 	cfg.consumer = kafkaConsumer
 	cfg.dlqProducer = dlqProducer
 	cfg.validate = validator.New()
 	return &cfg
 }
 
-// Consume starts the message consumption loop and returns a closure to gracefully stop resources.
-func (k *KafkaOrderConfig) Consume(ctx context.Context) func() {
+// Start initiates the Kafka message consumption loop and returns a cleanup function.
+// The loop runs in a goroutine, processing messages with concurrency control.
+func (k *KafkaOrderConfig) Start() func() {
+	// Subscribe to the configured Kafka topic
 	err := k.consumer.SubscribeTopics([]string{k.Config.KafkaTopic}, nil)
 	if err != nil {
-		k.Logger.Fatal("failed_to_subscribe", zap.Error(err))
+		k.Logger.Fatal("failedToSubscribeToTopic", zap.Error(err))
 	}
 
-	k.Logger.Info("listening_to_topic", zap.String("topic", k.Config.KafkaTopic), zap.Any("group", k.Config.KafkaConsumerGroup))
-
-	// Limit concurrent jobs
-	sem := make(chan struct{}, k.Config.MaxOrdersPlacedConcurrentJobs)
+	k.Logger.Info("listeningToTopic", zap.String("topic", k.Config.KafkaTopic), zap.String("group", k.Config.KafkaConsumerGroup))
 
 	go func() {
 		for {
 			msg, err := k.consumer.ReadMessage(-1)
 			if err != nil {
-				k.Logger.Error("read_error", zap.Error(err))
+				k.Logger.Error("readMessageError", zap.Error(err))
 				continue
 			}
-			sem <- struct{}{} // Acquire slot, blocks if at limit
+			// Acquire semaphore slot, blocking if limit is reached
+			k.orderSem <- struct{}{}
 			go func(m *kafka.Message) {
-				defer func() { <-sem }() // Release slot
-				k.processMessage(ctx, m)
+				defer func() { <-k.orderSem }() // Release slot after processing
+				k.processMessage(m)
 			}(msg)
 		}
 	}()
 
+	// Return cleanup function to gracefully shut down resources
 	return func() {
-		// drain producer
 		if k.dlqProducer != nil {
 			k.dlqProducer.Flush(5000)
 			k.dlqProducer.Close()
 		}
 		if err := k.consumer.Close(); err != nil {
-			k.Logger.Error("close_error", zap.Error(err))
-			return
+			k.Logger.Error("failedToCloseConsumer", zap.Error(err))
 		}
-		k.Logger.Info("consumer_closed")
+		k.Logger.Info("consumerClosedSuccessfully")
 	}
 }
 
-func (k *KafkaOrderConfig) processMessage(ctx context.Context, msg *kafka.Message) {
+// processMessage handles the processing of a single Kafka message.
+// It decodes, validates, and processes the payment job, committing or sending to DLQ as needed.
+func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 	select {
-	case <-ctx.Done():
-		return
+	case <-k.Context.Done():
+		return // Exit if context is canceled
 	default:
 	}
 
-	// decode message
-	var paymentJob views.PaymentJob
-	if err := json.Unmarshal(msg.Value, &paymentJob); err != nil {
-		k.Logger.Error("failed_to_decode_message", zap.Error(err))
-		k.sendToDLQ(ctx, msg, "json unmarshal error", err.Error())
-		// commit to skip this bad message
-		_, _ = k.consumer.CommitMessage(msg)
+	// Decode the incoming message into a PaymentJob struct
+	var job views.PaymentJob
+	if err := json.Unmarshal(msg.Value, &job); err != nil {
+		k.Logger.Error("failedToDecodeMessage", zap.Error(err))
+		k.sendToDLQ(job, "jsonUnmarshalError", err.Error())
+		_, _ = k.consumer.CommitMessage(msg) // Commit to skip invalid message
 		return
 	}
 
-	// Validate after unmarshal
-	if err := k.validate.Struct(&paymentJob); err != nil {
-		k.Logger.Error("failed_to_validate_message", zap.Error(err))
-		k.sendToDLQ(ctx, msg, "validate error", err.Error())
-		// commit to skip this bad message
-		_, _ = k.consumer.CommitMessage(msg)
+	// Validate the decoded job structure
+	if err := k.validate.Struct(&job); err != nil {
+		k.Logger.Error("failedToValidateMessage", zap.Error(err))
+		k.sendToDLQ(job, "validationError", err.Error())
+		_, _ = k.consumer.CommitMessage(msg) // Commit to skip invalid message
 		return
 	}
 
-	// process message
-	k.Logger.Info("processing_message", zap.Any("paymentJob", paymentJob))
-	procErr := k.PaymentService.HandlePayment(ctx, paymentJob)
+	// Process the payment job
+	k.Logger.Info("processingMessage", zap.Any("paymentJob", job))
+	procErr := k.PaymentProcessor.ProcessPayment(k.Context, job)
 	if procErr != nil {
-		k.Logger.Error("failed_to_process_payment_sending_to_dlq", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(procErr))
-		k.sendToDLQ(ctx, msg, "process_payment_error", procErr.Error())
-		// commit to avoid reprocessing the poison message
+		k.Logger.Error("failedToProcessPaymentSendingToDlq", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(procErr))
+		k.sendToDLQ(job, "processPaymentError", procErr.Error())
 		if _, err := k.consumer.CommitMessage(msg); err != nil {
-			k.Logger.Error("failed_to_commit_offset_after_dlq", zap.Error(err))
+			k.Logger.Error("failedToCommitOffsetAfterDlq", zap.Error(err))
 		}
 		return
 	}
 
-	// success, commit offset
+	// Successfully processed, commit the offset
 	if _, err := k.consumer.CommitMessage(msg); err != nil {
-		k.Logger.Error("failed_to_commit_offset", zap.Error(err))
+		k.Logger.Error("failedToCommitOffset", zap.Error(err))
 		return
 	}
-	k.Logger.Info("payment processed successfully", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey))
+	k.Logger.Info("paymentProcessedSuccessfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 }
 
-// sendToDLQ publishes the original message with error context to the configured DLQ topic.
-func (k *KafkaOrderConfig) sendToDLQ(_ context.Context, original *kafka.Message, reason, errMsg string) {
-	if k.dlqProducer == nil {
-		k.Logger.Error("dlq_producer_not_initialized_dropping_message", zap.String("reason", reason))
-		return
-	}
-	// Wrap with metadata
+// sendToDLQ sends a failed job to the Dead Letter Queue with context.
+func (k *KafkaOrderConfig) sendToDLQ(job views.PaymentJob, reason, errMsg string) {
 	payload := map[string]any{
-		"original_topic":     getTopic(original),
-		"original_partition": original.TopicPartition.Partition,
-		"original_offset":    original.TopicPartition.Offset,
-		"key":                stringOrNil(original.Key),
-		"value":              string(original.Value),
-		"headers":            headersToMap(original.Headers),
-		"failure_reason":     reason,
-		"error":              errMsg,
-		"failed_at":          time.Now().UTC().Format(time.RFC3339Nano),
+		"job":           job,
+		"failureReason": reason,
+		"error":         errMsg,
+		"failedAt":      time.Now().UTC().Format(time.RFC3339Nano),
 	}
+
 	b, _ := json.Marshal(payload)
 
 	err := k.dlqProducer.Produce(&kafka.Message{
-		TopicPartition: kafka.TopicPartition{Topic: &k.Config.KafkaDLQTopic, Partition: kafka.PartitionAny},
-		Key:            original.Key,
-		Value:          b,
-		Headers:        append(original.Headers, kafka.Header{Key: "x-dlq-reason", Value: []byte(reason)}),
+		TopicPartition: kafka.TopicPartition{
+			Topic:     &k.Config.KafkaDLQTopic,
+			Partition: kafka.PartitionAny,
+		},
+		Key:   job.IdempotencyKey[:],
+		Value: b,
 	}, nil)
 	if err != nil {
-		k.Logger.Error("failed_to_produce_to_dlq", zap.Error(err))
+		k.Logger.Error("failedToProduceToOrderDlq", zap.Error(err))
 		return
 	}
-}
-
-func getTopic(msg *kafka.Message) string {
-	if msg.TopicPartition.Topic == nil {
-		return ""
-	}
-	return *msg.TopicPartition.Topic
-}
-
-func stringOrNil(b []byte) any {
-	if b == nil {
-		return nil
-	}
-	return string(b)
-}
-
-func headersToMap(hdrs []kafka.Header) map[string]string {
-	m := make(map[string]string, len(hdrs))
-	for _, h := range hdrs {
-		m[h.Key] = string(h.Value)
-	}
-	return m
+	k.Logger.Info("sentToOrderDlq", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.String("reason", reason))
 }

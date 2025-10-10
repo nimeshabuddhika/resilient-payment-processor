@@ -13,6 +13,7 @@ type PaymentJob struct {
 	IdempotencyKey uuid.UUID `json:"idempotencyKey" validate:"required,uuid"`
 	Amount         string    `json:"amount" validate:"required"`
 	RetryCount     int       `json:"retryCount" validate:"min=0"`
+	NextRetryTime  time.Time `json:"nextRetryTime"`
 	CreatedAt      time.Time `json:"createdAt" validate:"required"`
 	UpdatedAt      time.Time `json:"updatedAt" validate:"required"`
 }

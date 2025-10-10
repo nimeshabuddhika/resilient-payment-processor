@@ -14,8 +14,8 @@ import (
 type AccountRepository interface {
 	// Create creates a new account.
 	Create(ctx context.Context, tx pgx.Tx, user models.Account) (pgconn.CommandTag, error)
-	// FindById finds an account by ID.
-	FindById(ctx context.Context, tx pgx.Tx, accountID uuid.UUID) (models.Account, error)
+	// FindByID finds an account by ID.
+	FindByID(ctx context.Context, tx pgx.Tx, accountID uuid.UUID) (models.Account, error)
 }
 
 type AccountRepositoryImpl struct {
@@ -32,7 +32,7 @@ func (a AccountRepositoryImpl) Create(ctx context.Context, tx pgx.Tx, account mo
 		account.ID, account.UserID, account.Balance, account.Currency, account.CreatedAt, account.UpdatedAt)
 }
 
-func (a AccountRepositoryImpl) FindById(ctx context.Context, tx pgx.Tx, accountID uuid.UUID) (models.Account, error) {
+func (a AccountRepositoryImpl) FindByID(ctx context.Context, tx pgx.Tx, accountID uuid.UUID) (models.Account, error) {
 	if accountID == uuid.Nil {
 		return models.Account{}, fmt.Errorf("invalid account ID: %s", accountID.String())
 	}
