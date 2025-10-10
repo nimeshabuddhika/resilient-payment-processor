@@ -42,19 +42,19 @@ func main() {
 	}()
 
 	// Handle shutdown signals (SIGINT, SIGTERM) for a K8s pod termination grace period
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logger.Info("shutting down")
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Timeout context for draining connections
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	osSignal := <-sigChan
+	logger.Info("Received shutdown signal", zap.String("signal", osSignal.String()))
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Fatal("shutdown error", zap.Error(err))
 	}
-
 	if err = logger.Sync(); err != nil {
 		panic(err)
 	}
+	<-shutdownCtx.Done()
+	logger.Info("Service shutdown completed successfully")
 }

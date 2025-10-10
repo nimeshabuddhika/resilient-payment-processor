@@ -47,7 +47,7 @@ func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
 	retryProducer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers, // List of Kafka broker addresses
 		"acks":               "all",                   // Wait for all replicas
-		"enable.idempotence": "true",                  // Ensure messages are not sent twice
+		"enable.idempotence": true,                    // Ensure messages are not sent twice
 		"retries":            cfg.Config.KafkaRetry,   // Built-in retry mechanism
 	})
 	if err != nil {
@@ -58,6 +58,7 @@ func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
 	// initializing dead letter queue retry producer
 	dlqProducer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers,
+		"acks":               "all",
 		"enable.idempotence": true,
 	})
 	if err != nil {
@@ -202,8 +203,13 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 	default:
 	}
 
-	// Acquire semaphore slot (blocks if at limit)
-	k.retrySemaphore <- struct{}{}
+	// Acquire semaphore
+	select {
+	case k.retrySemaphore <- struct{}{}:
+		// Acquired
+	case <-k.Context.Done():
+		return
+	}
 	defer func() { <-k.retrySemaphore }() // Release after full processing, including commit/DLQ
 
 	// Decode message

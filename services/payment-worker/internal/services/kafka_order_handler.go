@@ -50,6 +50,7 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 	// Initialize DLQ producer for failed messages
 	dlqProducer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers,
+		"acks":               "all",
 		"enable.idempotence": true, // Ensure messages are not duplicated
 	})
 	if err != nil {
