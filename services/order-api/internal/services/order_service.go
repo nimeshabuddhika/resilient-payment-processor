@@ -12,12 +12,12 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
-	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
+	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/dtos"
 	"go.uber.org/zap"
 )
 
 type OrderService interface {
-	CreateOrder(ctx context.Context, traceId string, userId uuid.UUID, req views.OrderRequest) (string, error)
+	CreateOrder(ctx context.Context, traceId string, userId uuid.UUID, request dtos.OrderRequest) (string, error)
 }
 
 type OrderServiceImpl struct {
@@ -44,7 +44,7 @@ func NewOrderService(logger *zap.Logger, cfg *configs.Config, publisher KafkaPub
 	}
 }
 
-func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, userId uuid.UUID, req views.OrderRequest) (string, error) {
+func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, userId uuid.UUID, req dtos.OrderRequest) (string, error) {
 	// For now, simulate order creation by generating a simple ID and logging the request.
 	order := models.Order{
 		ID:             uuid.New(),

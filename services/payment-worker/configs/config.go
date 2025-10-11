@@ -29,7 +29,7 @@ type Config struct {
 	AesKey                        string        `mapstructure:"AES_KEY" validate:"required"`
 	RedisAddr                     string        `mapstructure:"REDIS_ADDR" validate:"required"`
 	MaxReplicaRateLimit           int           `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
-	MaxRetryCount                 int           `mapstructure:"MaxRetryCount" validate:"min=1,max=5"`
+	MaxRetryCount                 int           `mapstructure:"MAX_RETRY_COUNT" validate:"min=1,max=5"`
 	MaxOrdersPlacedConcurrentJobs int           `mapstructure:"MAX_ORDERS_PLACED_CONCURRENT_JOBS" validate:"min=1"`
 	MaxOrdersRetryConcurrentJobs  int           `mapstructure:"MAX_ORDERS_RETRY_CONCURRENT_JOBS" validate:"min=1"`
 }

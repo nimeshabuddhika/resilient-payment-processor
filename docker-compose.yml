@@ -89,9 +89,16 @@ services:
       APP_KAFKA_BROKERS: "kafka:29092" # For local development only
       APP_KAFKA_TOPIC: "orders-placed"
       APP_KAFKA_DLQ_TOPIC: "orders-placed-dlq"
+      APP_KAFKA_RETRY_TOPIC: "orders-retry"
+      APP_KAFKA_RETRY_DLQ_TOPIC: "orders-retry-dlq"
       APP_KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
       APP_PRIMARY_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
       APP_REDIS_ADDR: "redis:6379"
+      APP_RETRY_BASE_BACKOFF: "30s"
+      APP_MAX_RETRY_BACKOFF: "5m"
+      APP_MAX_RETRY_COUNT: "3"
+      APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "5"
+      APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "5"
     depends_on:
       - kafka
       - postgres

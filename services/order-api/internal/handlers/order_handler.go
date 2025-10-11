@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
+	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/dtos"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
-	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/views"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +53,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	var req views.OrderRequest
+	var req dtos.OrderRequest
 	if err = c.ShouldBindJSON(&req); err != nil {
 		resp := pkg.ToErrorResponse(h.logger, traceID, pkg.NewAppError(pkg.ErrInvalidInputCode, "invalid input", err))
 		c.JSON(resp.Status, resp)

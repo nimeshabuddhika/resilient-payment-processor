@@ -11,6 +11,6 @@ RETRY_BASE_BACKOFF: "30s"
 MAX_RETRY_BACKOFF: "5m"
 PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
 REDIS_ADDR: "localhost:6379"
-MaxRetryCount: "3"
+MAX_RETRY_COUNT: "3"
 MAX_ORDERS_PLACED_CONCURRENT_JOBS: "5"
 MAX_ORDERS_RETRY_CONCURRENT_JOBS: "5"

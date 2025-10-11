@@ -53,7 +53,7 @@ func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
 	if err != nil {
 		cfg.Logger.Fatal("failedToCreateKafkaProducer", zap.Error(err))
 	}
-	cfg.Logger.Info("kafkaProducerCreatedSuccessfully", zap.String("brokers", cfg.Config.KafkaBrokers))
+	cfg.Logger.Info("Kafka producer created successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
 
 	// initializing dead letter queue retry producer
 	dlqProducer, err := kafka.NewProducer(&kafka.ConfigMap{
@@ -197,12 +197,6 @@ func (k *KafkaRetryConfig) startRetryConsumer() {
 // processRetryMessage processes a retry message synchronously.
 // It enforces backoff with blocking sleep, processes the payment, and commits/DLQs accordingly.
 func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
-	select {
-	case <-k.Context.Done():
-		return
-	default:
-	}
-
 	// Acquire semaphore
 	select {
 	case k.retrySemaphore <- struct{}{}:

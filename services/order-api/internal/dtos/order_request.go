@@ -1,11 +1,11 @@
-package views
+package dtos
 
 import (
 	"github.com/google/uuid"
 )
 
 // OrderRequest info
-// @description Order request info
+// @description Order request
 type OrderRequest struct {
 	IdempotencyID uuid.UUID `json:"idempotencyId" binding:"required,uuid"` // Client-provided UUID for idempotency
 	AccountID     uuid.UUID `json:"accountId" binding:"required,uuid"`
