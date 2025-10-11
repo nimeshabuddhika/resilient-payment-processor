@@ -34,9 +34,6 @@ func PostRequestWithHeaders(t *testing.T, url string, payload interface{}, heade
 	if req.Header.Get(pkg.HeaderRequestId) == "" {
 		req.Header.Set(pkg.HeaderRequestId, uuid.New().String())
 	}
-	if req.Header.Get(pkg.HeaderTraceId) == "" {
-		req.Header.Set(pkg.HeaderTraceId, uuid.New().String())
-	}
 	client := &http.Client{}
 	t.Logf("Request POST %s with headers", url)
 	resp, err := client.Do(req)

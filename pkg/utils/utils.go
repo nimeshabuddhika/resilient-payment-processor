@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 // IsEmpty checks if a string is empty.
@@ -47,4 +50,43 @@ func ToFloat64(s string) (float64, error) {
 // Float64ToByte converts a float64 to a byte array.
 func Float64ToByte(bal float64) []byte {
 	return []byte(fmt.Sprintf("%.2f", bal))
+}
+
+// FormatConfigErrors formats validation errors into a human-readable message.
+func FormatConfigErrors(logger *zap.Logger, err error, cfg interface{}) error {
+	var varErr validator.ValidationErrors
+	if errors.As(err, &varErr) {
+		var parts []string
+		for _, fe := range varErr {
+			field := fe.Field()
+			tag := fe.Tag()
+			param := fe.Param()
+
+			// Humanized message
+			var msg string
+			switch tag {
+			case "required":
+				msg = fmt.Sprintf("%s is required", field)
+			case "min":
+				msg = fmt.Sprintf("%s must be at least %s", field, param)
+			case "max":
+				msg = fmt.Sprintf("%s must be at most %s", field, param)
+			default:
+				if param != "" {
+					msg = fmt.Sprintf("%s failed validation %s=%s", field, tag, param)
+				} else {
+					msg = fmt.Sprintf("%s failed validation %s", field, tag)
+				}
+			}
+
+			logger.Error("invalid configuration",
+				zap.String("field", field),
+				zap.String("constraint", tag),
+				zap.String("param", param),
+			)
+			parts = append(parts, msg)
+		}
+		return fmt.Errorf("invalid configuration: %s", strings.Join(parts, "; "))
+	}
+	return err
 }

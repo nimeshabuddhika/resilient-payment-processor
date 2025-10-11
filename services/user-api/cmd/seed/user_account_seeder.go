@@ -22,7 +22,7 @@ import (
 // It initializes logging, loads config, connects to the database, runs migrations,
 // and performs inserts inside a single transaction.
 func main() {
-	noOfUsers := flag.Int("noOfUsers", 10, "Number of users to seed")
+	noOfUsers := flag.Int("noOfUsers", 1000, "Number of users to seed")
 	maxAccountsPerUser := flag.Int("maxAccounts", 2, "Max accounts per user")
 	minAccountBalance := flag.Float64("minBalance", 700.0, "Min account balance")
 	maxAccountBalance := flag.Float64("maxBalance", 1000.0, "Max account balance")

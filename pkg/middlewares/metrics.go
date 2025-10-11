@@ -43,6 +43,18 @@ var (
 	)
 )
 
+// ActiveTransactions tracks active transactions via a gauge metric exposed by each payment-worker
+var (
+	ActiveTransactions = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "resilient_payment_processor",
+			Name:      "active_transactions",
+			Help:      "Number of transactions currently being processed by this worker",
+		},
+		[]string{"worker_id"},
+	)
+)
+
 // Metrics returns Gin middleware for Prometheus instrumentation.
 func Metrics() gin.HandlerFunc {
 	return func(c *gin.Context) {

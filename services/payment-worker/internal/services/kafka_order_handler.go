@@ -59,6 +59,7 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 
 	// Initialize semaphore with configured max concurrent jobs
 	cfg.orderSem = make(chan struct{}, cfg.Config.MaxOrdersPlacedConcurrentJobs)
+	cfg.Logger.Info("Initialized order semaphore", zap.Int("semaphore_size", cfg.Config.MaxOrdersPlacedConcurrentJobs))
 	cfg.consumer = kafkaConsumer
 	cfg.dlqProducer = dlqProducer
 	cfg.validate = validator.New()
@@ -77,7 +78,6 @@ func (k *KafkaOrderConfig) Start() func() {
 	k.Logger.Info("Listening to Kafka topic",
 		zap.String("topic", k.Config.KafkaTopic),
 		zap.String("group", k.Config.KafkaConsumerGroup))
-
 	go func() {
 		for {
 			msg, err := k.consumer.ReadMessage(-1)
@@ -85,6 +85,7 @@ func (k *KafkaOrderConfig) Start() func() {
 				k.Logger.Error("Failed to read Kafka message", zap.Error(err))
 				continue
 			}
+			k.Logger.Info("reading order messages", zap.Int("semaphore_size", len(k.orderSem)))
 			// Acquire semaphore slot, blocking if limit is reached
 			k.orderSem <- struct{}{}
 			go func(m *kafka.Message) {

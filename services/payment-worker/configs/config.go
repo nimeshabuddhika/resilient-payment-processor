@@ -64,11 +64,13 @@ func Load(logger *zap.Logger) (*Config, error) {
 	if err := utils.ParseStructEnv(&cfg); err != nil {
 		return nil, err
 	}
+
+	logger.Debug("config loaded", zap.Int("order_placed_concurrent_jobs", cfg.MaxOrdersPlacedConcurrentJobs), zap.Int("order_retry_placed_concurrent_jobs", cfg.MaxOrdersRetryConcurrentJobs)) // TODO TOBE REMOVED
+
 	// Validate after unmarshal
 	validate := validator.New()
 	if err := validate.Struct(&cfg); err != nil {
-		return nil, err
+		return nil, utils.FormatConfigErrors(logger, err, cfg)
 	}
-
 	return &cfg, nil
 }

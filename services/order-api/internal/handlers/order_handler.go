@@ -45,7 +45,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		c.JSON(resp.Status, resp)
 		return
 	}
-	userIdStr := c.GetHeader("userId") // TODO : User Id should be retrieve from JWT Authorization header. This is for demo purpose only.
+	userIdStr := c.GetHeader(pkg.UserId) // TODO : User Id should be retrieve from JWT Authorization header. This is for demo purpose only.
 	userUUID, err := uuid.Parse(userIdStr)
 	if err != nil {
 		resp := pkg.ToErrorResponse(h.logger, traceID, pkg.NewAppError(pkg.ErrInvalidInputCode, "failed to parse user UUID from header", err))

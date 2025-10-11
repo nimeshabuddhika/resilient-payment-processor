@@ -8,6 +8,7 @@ const (
 const (
 	TraceId        string = "trace_id"
 	RequestId      string = "request_id"
+	UserId         string = "user_id"
 	IdempotencyKey string = "idempotency_key"
 )
 

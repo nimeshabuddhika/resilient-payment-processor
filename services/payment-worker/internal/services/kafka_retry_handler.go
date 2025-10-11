@@ -197,8 +197,14 @@ func (k *KafkaRetryConfig) startRetryConsumer() {
 // processRetryMessage processes a retry message synchronously.
 // It enforces backoff with blocking sleep, processes the payment, and commits/DLQs accordingly.
 func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
+	select { // Block 1: Non-blocking context check
+	case <-k.Context.Done():
+		return
+	default:
+	}
+
 	// Acquire semaphore
-	select {
+	select { // Block 2: Context-aware semaphore acquisition. Provides an early exit if the context is canceled before attempting semaphore acquisition.
 	case k.retrySemaphore <- struct{}{}:
 		// Acquired
 	case <-k.Context.Done():
@@ -206,6 +212,7 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 	}
 	defer func() { <-k.retrySemaphore }() // Release after full processing, including commit/DLQ
 
+	// ... (decoding, validation, backoff sleep, processing, commit/DLQ)
 	// Decode message
 	var job views.PaymentJob
 	if err := json.Unmarshal(msg.Value, &job); err != nil {

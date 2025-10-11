@@ -48,7 +48,7 @@ func (a AccountRepositoryImpl) GetAccountsByUserID(db *database.DB, ctx context.
 	//calculate offset.
 	offset := (pageNumber - 1) * size
 
-	rows, err := db.Query(ctx, `SELECT id, user_id, created_at, updated_at FROM svc_schema.accounts WHERE accounts.user_id = $1 LIMIT $2 OFFSET $3`,
+	rows, err := db.Query(ctx, `SELECT id, user_id,currency, created_at, updated_at FROM svc_schema.accounts WHERE accounts.user_id = $1 LIMIT $2 OFFSET $3`,
 		userID, size, offset)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (a AccountRepositoryImpl) GetAccountsByUserID(db *database.DB, ctx context.
 	accounts := make([]models.Account, 0)
 	for rows.Next() {
 		var acc models.Account
-		if err := rows.Scan(&acc.ID, &acc.UserID, &acc.CreatedAt, &acc.UpdatedAt); err != nil {
+		if err := rows.Scan(&acc.ID, &acc.UserID, &acc.Currency, &acc.CreatedAt, &acc.UpdatedAt); err != nil {
 			return nil, err
 		}
 		accounts = append(accounts, acc)

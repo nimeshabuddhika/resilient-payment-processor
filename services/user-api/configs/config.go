@@ -43,8 +43,7 @@ func Load(logger *zap.Logger) (*Config, error) {
 	// Validate after unmarshal
 	validate := validator.New()
 	if err := validate.Struct(&cfg); err != nil {
-		return nil, err
+		return nil, utils.FormatConfigErrors(logger, err, cfg)
 	}
-
 	return &cfg, nil
 }
