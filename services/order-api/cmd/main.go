@@ -36,15 +36,15 @@ func main() {
 	// Build app server and dependencies
 	srv, cleanup, err := appsvc.NewApp(ctx, logger)
 	if err != nil {
-		logger.Fatal("failed to build app", zap.Error(err))
+		logger.Fatal("failed_to_build_app", zap.Error(err))
 	}
 	defer cleanup()
 
 	// Start a server in goroutine to allow signal handling
 	go func() {
-		logger.Sugar().Infow("Order API started", "addr", srv.Addr)
+		logger.Sugar().Infow("order_API_started", "addr", srv.Addr)
 		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatal("server error", zap.Error(err))
+			logger.Fatal("server_error", zap.Error(err))
 		}
 	}()
 
@@ -53,7 +53,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	osSignal := <-sigChan
-	logger.Info("Received shutdown signal", zap.String("signal", osSignal.String()))
+	logger.Info("received_shutdown_signal", zap.String("signal", osSignal.String()))
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -63,5 +63,5 @@ func main() {
 		panic(err)
 	}
 	<-shutdownCtx.Done()
-	logger.Info("Service shutdown completed successfully")
+	logger.Info("service_shutdown_completed_successfully")
 }

@@ -33,7 +33,7 @@ type OrderServiceImpl struct {
 func NewOrderService(logger *zap.Logger, cfg *configs.Config, publisher KafkaPublisher, db *database.DB, repo repositories.OrderRepository, accountRepo repositories.AccountRepository) OrderService {
 	key, err := utils.DecodeString(cfg.AesKey)
 	if err != nil {
-		logger.Fatal("failed to decode AES key", zap.Error(err))
+		logger.Fatal("failed_to_decode_AES_key", zap.Error(err))
 	}
 	return &OrderServiceImpl{
 		logger:         logger,
@@ -65,10 +65,10 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 			return pkg.HandleSQLError(traceId, s.logger, err)
 		}
 		if exists {
-			s.logger.Warn("idempotency key already exists",
+			s.logger.Warn("idempotency_key_already_exists",
 				zap.String(pkg.TraceId, traceId),
-				zap.String("idempotencyKey", req.IdempotencyID.String()))
-			return pkg.NewAppError(pkg.ErrIdempotencyConflictCode, "idempotency key already exists", nil)
+				zap.String(pkg.IdempotencyKey, req.IdempotencyID.String()))
+			return pkg.NewAppError(pkg.ErrIdempotencyConflictCode, "idempotency_key_already_exists", nil)
 		}
 		// Get account
 		account, err := s.accountRepo.FindByID(ctx, tx, req.AccountID)
@@ -79,27 +79,27 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 		// decrypt balance
 		accountBalanceStr, err := utils.DecryptAES(account.Balance, s.aesKey) // TODO: use a key manager or call user-api to get the balance
 		if err != nil {
-			s.logger.Error("failed to decrypt balance", zap.String(pkg.TraceId, traceId), zap.Error(err))
-			return pkg.NewAppError(pkg.ErrServerCode, "decryption failed", err)
+			s.logger.Error("failed_to_decrypt_balance", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			return pkg.NewAppError(pkg.ErrServerCode, "decryption_failed", err)
 		}
 		// convert `accountBalanceStr` to float64
 		accountBalance, err := utils.ToFloat64(accountBalanceStr)
 		if err != nil {
-			s.logger.Error("failed to convert balance to float64", zap.String(pkg.TraceId, traceId), zap.Error(err))
-			return pkg.NewAppError(pkg.ErrServerCode, "parse failed", err)
+			s.logger.Error("failed_to_convert_balance_to_float64", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			return pkg.NewAppError(pkg.ErrServerCode, "parse_failed", err)
 		}
 
 		// Check balance
 		if accountBalance < req.Amount {
-			s.logger.Warn("insufficient balance", zap.String(pkg.TraceId, traceId))
-			return pkg.NewAppError(pkg.ErrInsufficientFundsCode, "insufficient balance", pkg.ErrInsufficientBalance)
+			s.logger.Warn("insufficient_balance", zap.String(pkg.TraceId, traceId))
+			return pkg.NewAppError(pkg.ErrInsufficientFundsCode, "insufficient_balance", pkg.ErrInsufficientBalance)
 		}
 
 		//encrypt transaction amount
 		encAmount, err := utils.EncryptAES(utils.Float64ToByte(req.Amount), s.aesKey)
 		if err != nil {
-			s.logger.Error("failed to encrypt transaction amount", zap.String(pkg.TraceId, traceId), zap.Error(err))
-			return pkg.NewAppError(pkg.ErrServerCode, "encryption failed", err)
+			s.logger.Error("failed_to_encrypt_transaction_amount", zap.String(pkg.TraceId, traceId), zap.Error(err))
+			return pkg.NewAppError(pkg.ErrServerCode, "encryption_failed", err)
 		}
 		order.Amount = encAmount
 
@@ -117,9 +117,9 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 	paymentJob := order.ToPaymentJob()
 	// Publish after commit
 	if err = s.kafkaPublisher.PublishOrder(paymentJob); err != nil {
-		s.logger.Error("failed to publish order", zap.String(pkg.TraceId, traceId), zap.Error(err))
+		s.logger.Error("failed_to_publish_order", zap.String(pkg.TraceId, traceId), zap.Error(err))
 		// TODO: Enqueue for retry or DLQ; don't fail API
 	}
-	s.logger.Info("order created successfully", zap.String(pkg.TraceId, traceId), zap.String("order_id", order.ID.String()))
+	s.logger.Info("order_created_successfully", zap.String(pkg.TraceId, traceId), zap.String("order_id", order.ID.String()), zap.Any(pkg.IdempotencyKey, order.IdempotencyKey))
 	return order.ID.String(), nil
 }

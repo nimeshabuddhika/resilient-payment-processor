@@ -107,7 +107,8 @@ services:
       APP_KAFKA_RETRY_RETENTION: "48h"
       APP_KAFKA_RETRY_DLQ_TOPIC: "orders-retry-dlq"
       APP_KAFKA_RETRY_DLQ_RETENTION: "168h"
-      APP_KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
+      APP_KAFKA_ORDER_CONSUMER_GROUP: "payment-order-workers"
+      APP_KAFKA_RETRY_CONSUMER_GROUP: "payment-retry-workers"
       APP_PRIMARY_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
       APP_MAX_DB_CONNECTIONS: "5"
       APP_MIN_DB_CONNECTIONS: "1"

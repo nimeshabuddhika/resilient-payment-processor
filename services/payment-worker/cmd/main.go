@@ -97,7 +97,7 @@ func main() {
 	closeRetryHandler := retryHandler.Start()
 
 	// Set up Kafka order consumer
-	orderHandler := services.NewKafkaOrderConsumer(services.KafkaOrderConfig{
+	orderHandler := services.NewKafkaOrderConsumer(&services.KafkaOrderConfig{
 		Context:          ctx,
 		Logger:           logger,
 		Config:           cfg,
@@ -110,7 +110,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	osSignal := <-sigChan
-	logger.Info("Received shutdown signal", zap.String("signal", osSignal.String()))
+	logger.Info("Received_shutdown_signal", zap.String("signal", osSignal.String()))
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	cancel() // Trigger context cancellation
@@ -119,5 +119,5 @@ func main() {
 	closeRetryHandler()
 	close(retryChannel) // Close retry channel to stop retry handler
 	<-shutdownCtx.Done()
-	logger.Info("Service shutdown completed successfully")
+	logger.Info("service_shutdown_completed_successfully")
 }

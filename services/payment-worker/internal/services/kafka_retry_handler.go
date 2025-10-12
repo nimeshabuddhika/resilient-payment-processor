@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/bytedance/gopkg/util/logger"
@@ -20,14 +21,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// KafkaRetryHandler defines the interface for handling retry operations for failed payment jobs for payment-worker service.
-// It is responsible for reading from the retry channel, retrying failed jobs, and publishing to the retry topic.
-// It also handles retrying failed jobs from the retry DLQ topic.
+// KafkaRetryHandler defines the contract for retrying failed payment jobs in the
+// payment-worker service. Implementations are responsible for:
+//   - reading from an in-memory retry channel and publishing to a Kafka retry topic,
+//   - consuming from the Kafka retry topic and processing jobs with backoff,
+//   - publishing unrecoverable jobs to a retry DLQ.
 type KafkaRetryHandler interface {
 	Start() func()
 }
 
-// KafkaRetryConfig holds configuration and dependencies for the retry handler.
+// KafkaRetryConfig holds runtime configuration and dependencies for the retry handler.
+// All fields are required and injected by the composition root (main/wiring).
 type KafkaRetryConfig struct {
 	Context          context.Context
 	Logger           *zap.Logger
@@ -36,81 +40,95 @@ type KafkaRetryConfig struct {
 	PaymentProcessor PaymentProcessor
 	DB               *database.DB
 	OrderRepo        repositories.OrderRepository
-	// internal initialization
+
+	// internal initialization (set by NewKafkaRetryHandler)
 	validate         *validator.Validate
 	dlqRetryProducer *kafka.Producer
 	retryProducer    *kafka.Producer
 	retryConsumer    *kafka.Consumer
-	retrySemaphore   chan struct{} // Semaphore to limit concurrent retry order processing
+	retrySemaphore   chan struct{} // semaphore to bound concurrent retry processing
 }
 
-// NewKafkaRetryHandler initializes a KafkaRetryHandler with the given configuration.
-// It sets up the retry producer, DLQ producer, consumer, and semaphore based on config values.
+// NewKafkaRetryHandler builds a KafkaRetryHandler and wires producers, consumer,
+// topics, validation, and a concurrency semaphore. No side effects beyond wiring.
 func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
-	// Initialize kafka topic configuration
+	// initialize Kafka topics (retry + DLQ) with retention policies
 	topicConfig := kafkautils.KafkaConfig{
 		BootstrapServers: cfg.Config.KafkaBrokers,
 		Topics: []kafkautils.TopicConfig{
 			{
-				Topic:             cfg.Config.KafkaRetryTopic, // Retry main topic
+				Topic:             cfg.Config.KafkaRetryTopic,
 				NumPartitions:     int(cfg.Config.KafkaPartition),
-				ReplicationFactor: 1, // Single partition
+				ReplicationFactor: 1,
 				Config: map[string]string{
 					"retention.ms": fmt.Sprintf("%d", cfg.Config.KafkaRetryRetention.Milliseconds()),
 				},
 			},
 			{
-				Topic:             cfg.Config.KafkaRetryDLQTopic, // Retry DLQ topic
+				Topic:             cfg.Config.KafkaRetryDLQTopic,
 				NumPartitions:     int(cfg.Config.KafkaPartition),
-				ReplicationFactor: 1, // Single partition
+				ReplicationFactor: 1,
 				Config: map[string]string{
 					"retention.ms": fmt.Sprintf("%d", cfg.Config.KafkaRetryDLQRetention.Milliseconds()),
 				},
 			},
 		},
 	}
-	err := kafkautils.InitKafkaTopics(cfg.Logger, cfg.Context, topicConfig)
-	if err != nil {
-		logger.Fatal("failed to initialize kafka topics", zap.Error(err))
+	if err := kafkautils.InitKafkaTopics(cfg.Logger, cfg.Context, topicConfig); err != nil {
+		logger.Fatal("failed_to_initialize_kafka_topics", zap.Error(err))
 	}
 
-	// initialize kafka retry producer
+	// retry producer
 	retryProducer, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers":  cfg.Config.KafkaBrokers, // List of Kafka broker addresses
-		"acks":               "all",                   // Wait for all replicas
-		"enable.idempotence": true,                    // Ensure messages are not sent twice
-		"retries":            "1",                     // Built-in retry mechanism
+		"bootstrap.servers":  cfg.Config.KafkaBrokers,
+		"acks":               "all",
+		"enable.idempotence": true,
+		"retries":            "1",
 	})
 	if err != nil {
-		cfg.Logger.Fatal("failedToCreateKafkaProducer", zap.Error(err))
+		cfg.Logger.Fatal("failed_to_create_kafka_producer", zap.Error(err))
 	}
-	cfg.Logger.Info("Kafka producer created successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
+	cfg.Logger.Info("kafka_producer_created_successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
 
-	// initializing dead letter queue retry producer
+	// retry DLQ producer
 	dlqProducer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers,
 		"acks":               "all",
 		"enable.idempotence": true,
 	})
 	if err != nil {
-		cfg.Logger.Fatal("Failed to create Kafka retry producer", zap.Error(err))
+		cfg.Logger.Fatal("failed_to_create_retry_dlq_producer", zap.Error(err))
 	}
-	cfg.Logger.Info("Kafka retry producer created successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
+	cfg.Logger.Info("retry_dlq_producer_created_successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
 
-	// initializing kafka retry consumer
+	// retry consumer
 	kafkaConfig := &kafka.ConfigMap{
-		"bootstrap.servers":  cfg.Config.KafkaBrokers,       // Kafka broker(s)
-		"group.id":           cfg.Config.KafkaConsumerGroup, // Consumer group
-		"auto.offset.reset":  "earliest",                    // Start from the beginning of the topic
-		"enable.auto.commit": false,                         // Disable auto commit
+		"bootstrap.servers":          cfg.Config.KafkaBrokers,
+		"group.id":                   cfg.Config.KafkaRetryConsumerGroup,
+		"auto.offset.reset":          "earliest",
+		"enable.auto.commit":         false,
+		"queued.max.messages.kbytes": "65536", // cap client-side prefetch to ~64MB to avoid burst memory spikes
+		"fetch.wait.max.ms":          50,      // allow small batching without adding too much latency
+
+		// --- Robust group behavior for multi-replica deployments ---
+		"partition.assignment.strategy": "cooperative-sticky", // incremental rebalances
+		"session.timeout.ms":            45000,                // tolerate brief stalls
+		"heartbeat.interval.ms":         3000,
+		"max.poll.interval.ms":          600000, // up to 10 min processing between polls
 	}
+	// Add a useful client.id for observability
+	if host, err := os.Hostname(); err == nil && host != "" {
+		cfg.Logger.Info("setting_client_id", zap.String("client_id", host))
+		_ = kafkaConfig.SetKey("client.id", host)
+	}
+
 	kafkaRetryConsumer, err := kafka.NewConsumer(kafkaConfig)
 	if err != nil {
-		cfg.Logger.Fatal("Failed to create retry DLQ producer", zap.Error(err))
+		cfg.Logger.Fatal("failed_to_create_retry_consumer", zap.Error(err))
 	}
-	cfg.Logger.Info("Retry DLQ producer created successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
+	cfg.Logger.Info("retry_consumer_created_successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
 
-	// Initialize semaphore for retry concurrency
+	// internal wiring
 	cfg.retrySemaphore = make(chan struct{}, cfg.Config.MaxOrdersRetryConcurrentJobs)
 	cfg.retryProducer = retryProducer
 	cfg.dlqRetryProducer = dlqProducer
@@ -119,39 +137,36 @@ func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
 	return &cfg
 }
 
-// Start begins listening on the retry channel and logs retry attempts.
+// Start spins up goroutines for delivery reports, channel-based retries, and the Kafka consumer.
+// It returns a close function to flush/close producers and the consumer gracefully.
 func (k *KafkaRetryConfig) Start() func() {
-	// delivery report logger, non-blocking
-	go k.startDeliveryReportLogger()
+	go k.startDeliveryReportLogger() // non-blocking delivery report reader
+	go k.startRetryChannelHandler()  // publish to retry topic from in-memory channel
+	go k.startRetryConsumer()        // consume/process retry topic
 
-	// Read from retry channel and retry failed jobs
-	go k.startRetryChannelHandler()
-
-	// Start retry kafka consumer
-	go k.startRetryConsumer()
-
-	k.Logger.Info("Listening to retry channel")
+	k.Logger.Info("listening_to_retry_channel")
 
 	return func() {
-		// drain producer
+		// drain and close producers/consumer
 		if k.retryProducer != nil {
 			k.retryProducer.Flush(5000)
 			k.retryProducer.Close()
-			k.Logger.Info("Retry producer closed successfully")
+			k.Logger.Info("retry_producer_closed_successfully")
 		}
 		if k.dlqRetryProducer != nil {
 			k.dlqRetryProducer.Flush(5000)
 			k.dlqRetryProducer.Close()
-			k.Logger.Info("Retry DLQ producer closed successfully")
+			k.Logger.Info("retry_dlq_producer_closed_successfully")
 		}
 		if err := k.retryConsumer.Close(); err != nil {
-			k.Logger.Error("Failed to close retry consumer", zap.Error(err))
+			k.Logger.Error("failed_to_close_retry_consumer", zap.Error(err))
 		}
-		k.Logger.Info("Retry consumer closed successfully")
+		k.Logger.Info("retry_consumer_closed_successfully")
 	}
 }
 
-// startRetryChannelHandler reads from the retry channel and publishes jobs to the retry topic immediately.
+// startRetryChannelHandler reads failed jobs from the in-memory retry channel,
+// increments retry metadata, computes backoff, and publishes to the retry topic immediately.
 func (k *KafkaRetryConfig) startRetryChannelHandler() {
 	for {
 		select {
@@ -161,156 +176,164 @@ func (k *KafkaRetryConfig) startRetryChannelHandler() {
 			if !ok {
 				return
 			}
-			// Increment retry count and calculate next retry time
-			job.RetryCount++
 
-			// Check if the max retry count is exceeded
+			// increment retry and enforce max
+			job.RetryCount++
 			if job.RetryCount > k.Config.MaxRetryCount {
-				k.Logger.Error("Maximum retry count exceeded in channel",
+				k.Logger.Error("maximum_retry_count_exceeded_in_channel",
 					zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-					zap.Int("retryCount", job.RetryCount))
+					zap.Int("retry_count", job.RetryCount),
+				)
 				k.sendToRetryDLQ(job, "maxRetryExceeded", fmt.Sprintf("Maximum retry count exceeded: %d", k.Config.MaxRetryCount))
 				continue
 			}
 
+			// compute backoff and set next retry time
 			delay := utils.CalculateExponentialBackoffWithJitter(job.RetryCount, k.Config.RetryBaseBackoff, k.Config.MaxRetryBackoff)
 			job.NextRetryTime = time.Now().Add(delay)
 
-			// Marshal and publish immediately
+			// serialize and publish
 			payload, err := json.Marshal(job)
 			if err != nil {
-				k.Logger.Error("Failed to marshal retry job",
+				k.Logger.Error("failed_to_marshal_retry_job",
 					zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-					zap.Error(err))
+					zap.Error(err),
+				)
 				continue
 			}
-			err = k.retryProducer.Produce(&kafka.Message{
+			if err := k.retryProducer.Produce(&kafka.Message{
 				TopicPartition: kafka.TopicPartition{Topic: &k.Config.KafkaRetryTopic, Partition: kafka.PartitionAny},
 				Key:            job.IdempotencyKey[:],
 				Value:          payload,
-			}, nil)
-			if err != nil {
-				k.Logger.Error("Failed to produce to retry topic",
+			}, nil); err != nil {
+				k.Logger.Error("failed_to_produce_to_retry_topic",
 					zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-					zap.Error(err))
+					zap.Error(err),
+				)
+				continue
 			}
-			k.Logger.Info("Published to retry topic",
+
+			k.Logger.Info("published_to_retry_topic",
 				zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-				zap.Int("retryCount", job.RetryCount),
-				zap.Time("nextRetryTime", job.NextRetryTime))
+				zap.Int("retry_count", job.RetryCount),
+				zap.Time("next_retry_time", job.NextRetryTime),
+			)
 		}
 	}
 }
 
-// startRetryConsumer starts the retry consumer loop.
+// startRetryConsumer subscribes to the retry topic and continuously reads messages
+// for processing. Each message is handled in its own goroutine (bounded by semaphore).
 func (k *KafkaRetryConfig) startRetryConsumer() {
-	// Subscribe to the configured Kafka topic
-	err := k.retryConsumer.SubscribeTopics([]string{k.Config.KafkaRetryTopic}, nil)
-	if err != nil {
-		k.Logger.Fatal("Failed to subscribe to retry topic", zap.Error(err))
+	if err := k.retryConsumer.SubscribeTopics([]string{k.Config.KafkaRetryTopic}, nil); err != nil {
+		k.Logger.Fatal("failed_to_subscribe_retry_topic", zap.Error(err))
 	}
 
-	k.Logger.Info("Listening to retry topic",
+	k.Logger.Info("listening_to_retry_topic",
 		zap.String("topic", k.Config.KafkaRetryTopic),
-		zap.String("group", k.Config.KafkaConsumerGroup))
+		zap.String("group", k.Config.KafkaRetryConsumerGroup),
+	)
 
 	for {
 		msg, err := k.retryConsumer.ReadMessage(-1)
 		if err != nil {
-			k.Logger.Error("Failed to read retry message", zap.Error(err))
+			k.Logger.Error("failed_to_read_retry_message", zap.Error(err))
 			continue
 		}
-		// Process synchronously in goroutine
 		go k.processRetryMessage(msg)
 	}
 }
 
-// processRetryMessage processes a retry message synchronously.
-// It enforces backoff with blocking sleep, processes the payment, and commits/DLQs accordingly.
+// processRetryMessage enforces backoff, processes a payment, and commits offsets.
+// Messages that cannot be recovered are sent to the retry DLQ.
 func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
-	select { // Block 1: Non-blocking context check
-	case <-k.Context.Done():
-		return
-	default:
-	}
-
-	// Acquire semaphore
-	select { // Block 2: Context-aware semaphore acquisition. Provides an early exit if the context is canceled before attempting semaphore acquisition.
-	case k.retrySemaphore <- struct{}{}:
-		// Acquired
-	case <-k.Context.Done():
-		return
-	}
-	defer func() { <-k.retrySemaphore }() // Release after full processing, including commit/DLQ
-
-	// ... (decoding, validation, backoff sleep, processing, commit/DLQ)
-	// Decode message
-	var job dtos.PaymentJob
-	if err := json.Unmarshal(msg.Value, &job); err != nil {
-		k.Logger.Error("Failed to decode message",
-			zap.Error(err))
-		k.sendToRetryDLQ(job, "Json unmarshal error", err.Error())
-		_, _ = k.retryConsumer.CommitMessage(msg) // Commit to skip bad message
-		return
-	}
-
-	// Validate after unmarshal
-	if err := k.validate.Struct(&job); err != nil {
-		k.Logger.Error("Failed to validate message",
-			zap.Error(err))
-		k.sendToRetryDLQ(job, "Validate Error", err.Error())
-		_, _ = k.retryConsumer.CommitMessage(msg) // Commit to skip
-		return
-	}
-
-	// Check max retry limit
-	if err := k.checkIfMaxRetryLimitExceeded(job, msg); err != nil {
-		// Function handles DLQ and commit internally
-		return
-	}
-
-	// Enforce backoff with blocking sleep durable via NextRetryTime in payload
-	if time.Now().Before(job.NextRetryTime) {
-		sleepDuration := time.Until(job.NextRetryTime)
-		k.Logger.Info("Enforcing backoff delay",
-			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-			zap.Duration("sleepDuration", sleepDuration),
-			zap.Int("retryCount", job.RetryCount))
-		time.Sleep(sleepDuration) // Synchronous delay
-	}
-
-	// Check context after sleep
+	// early exit if shutting down
 	select {
 	case <-k.Context.Done():
-		return // Do not commit if canceled; allow re-delivery
+		return
 	default:
 	}
 
-	// Process payment
-	k.Logger.Info("Processing retry message",
+	// acquire semaphore with context
+	select {
+	case k.retrySemaphore <- struct{}{}:
+	case <-k.Context.Done():
+		return
+	}
+	defer func() { <-k.retrySemaphore }()
+
+	// decode
+	var job dtos.PaymentJob
+	if err := json.Unmarshal(msg.Value, &job); err != nil {
+		k.Logger.Error("failed_to_decode_message", zap.Error(err))
+		k.sendToRetryDLQ(job, "Json unmarshal error", err.Error())
+		_, _ = k.retryConsumer.CommitMessage(msg) // commit to skip bad message
+		return
+	}
+
+	// validate
+	if err := k.validate.Struct(&job); err != nil {
+		k.Logger.Error("failed_to_validate_message", zap.Error(err))
+		k.sendToRetryDLQ(job, "Validate Error", err.Error())
+		_, _ = k.retryConsumer.CommitMessage(msg) // commit to skip bad message
+		return
+	}
+
+	// max retry check (handles DLQ + commit internally)
+	if err := k.checkIfMaxRetryLimitExceeded(job, msg); err != nil {
+		return
+	}
+
+	// enforce backoff using NextRetryTime in payload
+	if time.Now().Before(job.NextRetryTime) {
+		sleepDuration := time.Until(job.NextRetryTime)
+		k.Logger.Info("enforcing_backoff_delay",
+			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
+			zap.Duration("sleep_duration", sleepDuration),
+			zap.Int("retry_count", job.RetryCount),
+		)
+		time.Sleep(sleepDuration)
+	}
+
+	// re-check context after sleep
+	select {
+	case <-k.Context.Done():
+		return // do not commit; allow re-delivery
+	default:
+	}
+
+	// process payment
+	k.Logger.Info("processing_retry_message",
 		zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-		zap.Int("retry_count", job.RetryCount))
-	procErr := k.PaymentProcessor.ProcessPayment(k.Context, job)
-	if procErr != nil {
-		k.Logger.Error("Failed to process payment, sending to DLQ",
-			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(procErr))
+		zap.Int("retry_count", job.RetryCount),
+	)
+	if procErr := k.PaymentProcessor.ProcessPayment(k.Context, job); procErr != nil {
+		k.Logger.Error("failed_to_process_payment_sending_to_dlq",
+			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
+			zap.Error(procErr),
+		)
 		k.sendToRetryDLQ(job, "Process payment error", procErr.Error())
 		if _, err := k.retryConsumer.CommitMessage(msg); err != nil {
-			k.Logger.Error("Failed to commit offset after DLQ", zap.Error(err))
+			k.Logger.Error("failed_to_commit_offset_after_dlq", zap.Error(err))
 		}
 		return
 	}
 
-	// Successfully processed, commit the offset
+	// success: commit offset
 	if _, err := k.retryConsumer.CommitMessage(msg); err != nil {
-		k.Logger.Error("Failed to commit offset", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		k.Logger.Error("failed_to_commit_offset",
+			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
+			zap.Error(err),
+		)
 		return
 	}
-	k.Logger.Info("Payment processed successfully",
-		zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	k.Logger.Info("retry_payment_processed_successfully",
+		zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
+	)
 }
 
-// sendToRetryDLQ publishes the given job to the retry DLQ topic.
+// sendToRetryDLQ publishes a job and failure context to the retry DLQ topic.
+// This function does not commit consumer offsets—callers must decide when to commit.
 func (k *KafkaRetryConfig) sendToRetryDLQ(job dtos.PaymentJob, reason, errMsg string) {
 	payload := map[string]any{
 		"job":           job,
@@ -319,76 +342,89 @@ func (k *KafkaRetryConfig) sendToRetryDLQ(job dtos.PaymentJob, reason, errMsg st
 		"failedAt":      time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
-	b, err := json.Marshal(payload) // Added error handling
+	b, err := json.Marshal(payload)
 	if err != nil {
-		k.Logger.Error("Failed to marshal DLQ payload",
+		k.Logger.Error("failed_to_marshal_dlq_payload",
 			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-			zap.Error(err))
+			zap.Error(err),
+		)
 		return
 	}
 
-	err = k.dlqRetryProducer.Produce(&kafka.Message{
+	if err := k.dlqRetryProducer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{
 			Topic:     &k.Config.KafkaRetryDLQTopic,
 			Partition: kafka.PartitionAny,
 		},
 		Key:   job.IdempotencyKey[:],
 		Value: b,
-	}, nil)
-	if err != nil {
-		k.Logger.Error("Failed to produce to retry DLQ",
-			zap.Error(err))
+	}, nil); err != nil {
+		k.Logger.Error("failed_to_produce_to_retry_dlq", zap.Error(err))
 		return
 	}
-	k.Logger.Info("Sent to retry DLQ",
+
+	k.Logger.Info("sent_to_retry_dlq",
 		zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-		zap.String("reason", reason))
+		zap.String("reason", reason),
+	)
 }
 
-// checkIfMaxRetryLimitExceeded checks if the retry count exceeds the max, sends to DLQ if so, and commits.
+// checkIfMaxRetryLimitExceeded updates state, DLQs, and commits if the job exceeded
+// the configured maximum retry count. Returns an error when the limit is exceeded.
 func (k *KafkaRetryConfig) checkIfMaxRetryLimitExceeded(job dtos.PaymentJob, msg *kafka.Message) error {
 	tx, err := k.DB.Begin(k.Context)
 	if err != nil {
-		k.Logger.Error("Failed to begin transaction for max retry check",
-			zap.Error(err))
+		k.Logger.Error("failed_to_begin_transaction_for_max_retry_check", zap.Error(err))
 		return err
 	}
 	defer func() {
 		if commitErr := k.DB.Commit(k.Context, tx); commitErr != nil {
-			k.Logger.Error("Failed to commit transaction for max retry check",
-				zap.Error(commitErr))
+			k.Logger.Error("failed_to_commit_transaction_for_max_retry_check", zap.Error(commitErr))
 		}
 	}()
 
 	if job.RetryCount > k.Config.MaxRetryCount {
-		k.Logger.Error("Maximum retry count exceeded",
+		k.Logger.Error("maximum_retry_count_exceeded",
 			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-			zap.Int("retry_count", job.RetryCount))
-		if err := k.OrderRepo.UpdateStatusIdempotencyID(k.Context, tx, job.IdempotencyKey, pkg.OrderStatusFailed, fmt.Sprintf("failed transaction after %d retries", job.RetryCount)); err != nil {
-			k.Logger.Error("Failed to update order status for max retry",
-				zap.Error(err))
+			zap.Int("retry_count", job.RetryCount),
+		)
+
+		if err := k.OrderRepo.UpdateStatusIdempotencyID(
+			k.Context, tx, job.IdempotencyKey, pkg.OrderStatusFailed,
+			fmt.Sprintf("failed transaction after %d retries", job.RetryCount),
+		); err != nil {
+			k.Logger.Error("failed_to_update_order_status_for_max_retry", zap.Error(err))
 		}
+
 		k.sendToRetryDLQ(job, "max retry exceeded", fmt.Sprintf("Max retry count exceeded: %d", k.Config.MaxRetryCount))
+
 		if _, commitErr := k.retryConsumer.CommitMessage(msg); commitErr != nil {
-			k.Logger.Error("Failed to commit after max retry DLQ", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(commitErr))
+			k.Logger.Error("failed_to_commit_after_max_retry_dlq",
+				zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
+				zap.Error(commitErr),
+			)
 		}
 		return errors.New("max retry count exceeded")
 	}
+
 	return nil
 }
 
-// startDeliveryReportLogger logs delivery reports for the retry topic.
+// startDeliveryReportLogger logs async delivery reports emitted by the retry producer.
+// It uses debug level for success and error level for failures.
 func (k *KafkaRetryConfig) startDeliveryReportLogger() {
 	for e := range k.retryProducer.Events() {
 		switch ev := e.(type) {
 		case *kafka.Message:
 			if ev.TopicPartition.Error != nil {
-				k.Logger.Error("Retry topic delivery failed",
+				k.Logger.Error("retry_topic_delivery_failed",
 					zap.Error(ev.TopicPartition.Error),
-					zap.Any("topic_partition", ev.TopicPartition))
+					zap.Any("topic_partition", ev.TopicPartition),
+				)
 			} else {
-				k.Logger.Debug("Retry topic delivered successfully",
-					zap.Any("topic_partition", ev.TopicPartition))
+				k.Logger.Debug("retry_topic_delivered_successfully",
+					zap.Any("topic_partition", ev.TopicPartition),
+				)
 			}
 		}
 	}
