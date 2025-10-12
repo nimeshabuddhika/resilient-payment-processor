@@ -20,7 +20,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// KafkaRetryHandler defines the interface for handling retry operations for failed payment jobs.
+// KafkaRetryHandler defines the interface for handling retry operations for failed payment jobs for payment-worker service.
+// It is responsible for reading from the retry channel, retrying failed jobs, and publishing to the retry topic.
+// It also handles retrying failed jobs from the retry DLQ topic.
 type KafkaRetryHandler interface {
 	Start() func()
 }

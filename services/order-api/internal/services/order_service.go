@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// OrderService defines the interface for handling order operations of order-api service.
 type OrderService interface {
 	CreateOrder(ctx context.Context, traceId string, userId uuid.UUID, request dtos.OrderRequest) (string, error)
 }

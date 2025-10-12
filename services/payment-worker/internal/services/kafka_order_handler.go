@@ -16,7 +16,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// KafkaOrderHandler defines the interface for consuming messages from Kafka topics.
+// KafkaOrderHandler defines the interface for consuming messages from Kafka topics for payment-worker service.
+// It is responsible for reading from the configured Kafka topic, processing messages, and publishing to the DLQ topic.
+// It also rate-limits concurrent processing of messages.
 type KafkaOrderHandler interface {
 	Start() func()
 }

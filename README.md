@@ -1,95 +1,64 @@
 # Resilient Payment Processor
 
-ResilientJobGo is an open-source demonstration of a scalable, event-driven job processing system
-built with Go microservices and Kafka. It showcases best practices in distributed systems, including horizontal scaling,
-resilience patterns (retries, rate limiting, circuit breakers), and observability. This project mirrors real-world
-high-volume pipelines for tasks
-like data processing or image resizing, emphasizing reliability,and maintainability in architecting production-ready
-systems.
+A scalable, event-driven microservices system demonstrating resilient distributed job processing (e.g., high-volume payment tasks). Built with Go, Kafka, Postgres, Redis, and observability tools. Mirrors real-world greenfield projects handling 10k+ concurrent jobs with zero critical issues.
 
-## Project Background
+## Architecture
+Aligned with event-driven best practices: decoupling via Kafka for scalability, idempotency for reliability, observability for maintainability. Follows Go conventions (lowercase packages, kebab-case folders) and domain-driven design (bounded contexts for users, orders, payments).
 
-* Situation: Needed a scalable system to handle 100k+ concurrent jobs without failures in a horizontally scalable
-  manner.
-* Task: Architect event-driven microservices with production features for job submission and processing.
-* Action: Built Go services with Kafka for messaging, added resilience patterns, deployed via Helm on Kubernetes, and
-  tested for load.
-* Result: System handles 5k jobs/min locally, zero critical issues in tests, ready for enterprise scaling.
+### High-Level Components
+- **Microservices** (Go + Gin for APIs, confluent-kafka-go):
+    - `order-api`: CRUD for orders. Validates balance (sync DB query), publishes to Kafka. REST: POST /orders.
+    - `payment-worker`: Stateless Kafka consumer. Processes jobs with resilience. Scales horizontally.
+- **Event Bus**: Kafka (topics: orders-placed partitioned by userID; retry/DLQ for failures).
+- **Data Stores**:
+    - Postgres (pgx driver): Shared DB with encryption (AES-GCM app-level).
+    - Redis: Distributed locks (e.g., for account holds), caching.
+- **Resilience** (/pkg): Retries (exponential backoff), rate limiting (golang.org/x/time/rate), circuit breakers, idempotency.
+- **Observability**: Prometheus metrics (job throughput/errors), Grafana dashboards, Loki/Promtail logs.
+- **Security**: AES encryption at rest. (Future: Keycloak for OAuth2/OIDC/RBAC.)
 
-## Key Features
+See [Architecture - v1.pdf](docs/Architecture-v1.pdf) for details.
 
-* API Service (Go with Gin): Accepts job submissions via JSON payloads, authenticates with Basic Auth (short-term;
-  planned OAuth2/OIDC with Keycloak for RBAC).
-* Worker Service (Go): Scalable consumers from Kafka topics, with retries, rate limiting (golang.org/x/time/rate), and
-  circuit breakers.
-* Event-Driven Messaging: Kafka topics for job queues and dead-letter queues for failures.
-* Scalability & Resilience: Horizontal scaling with Kubernetes replicas, resource locking via Redis.
-* Observability: Prometheus metrics (job throughput, error rates), Grafana dashboards, structured logging with Zap.
-* Security: Tenant isolation with IDs in Kafka partitions; certificate management (self-signed for dev).
-* AI Tie-In: Uses Torch (via Go bindings) for job classification to prioritize high-impact tasks.
-* Deployment: Kubernetes via Helm Charts, including Ingress for API exposure.
-* Testing: Unit/integration tests with Go Test + Testify, Testcontainers for Kafka/Redis, JMeter load tests.
-* CI/CD: GitHub Actions for build, test, deploy.
-* Maintainability: Common library in `/libs`.
+## Situation, Task, Action, Result (STAR)
+- **Situation**: Needed scalable system for 100k+ concurrent jobs without failures.
+- **Task**: Architect event-driven microservices with production features.
+- **Action**: Built Go services with Kafka, added resilience, deployed via Docker, tested for load.
+- **Result**: Handles 5k jobs/min locally, zero critical issues, ready for enterprise scaling.
 
-# Installation
+## Setup and Usage
+### Prerequisites
+- Go 1.23+
+- Docker + Compose
+- Git
 
-1. Clone the repository:
+### Local Development
+1. Clone: `git clone https://github.com/nimeshabuddhika/resilient-payment-processor.git && cd resilient-payment-processor`
+2. Build docs: `make docs`
+3. Start infra: `make up`
+4. Start services: `make up-services`
+5. Seed data: `make seed-users-and-accounts && make seed-orders`
+6. Access:
+    - order-api: http://localhost:8081/swagger/index.html (POST /orders)
+    - Grafana: http://localhost:3000 (admin/admin)
+    - Kafka UI: http://localhost:8180
+    - Prometheus: http://localhost:9090
 
-```
-git clone https://github.com/nimeshabuddhika/resilient-job-go.git
-cd resilient-job-go
-```
+Test end-to-end: Submit order via Swagger; monitor processing in payment-worker logs/Grafana.
 
-2. Install dependencies:
+### Testing
+- Unit/Integration: `go test ./...` (uses Testify, Testcontainers for Kafka/Redis).
+- Load: JMeter scripts in /tests/load (future expansion).
 
-```
-    go mod tidy
-```
+### Deployment
+- Local: Docker Compose (above).
+- Kubernetes: Helm charts in /charts (apply via Minikube: `helm install rpp ./charts/resilient-payment-processor`). (future expansion).
 
-3. Set up local environment (requires Docker, Minikube/Kubernetes, Kafka via Helm):
-
-```
-minikube start
-helm install kafka confluentinc/cp-helm-charts --name my-kafka
-```
-
-4. Build services:
-
-```
-go build -o api ./api/cmd/main.go
-go build -o worker ./worker/cmd/main.go
-```
-
-## Usage
-
-1. Run API service:
-
-```
- ./api
-```
-
-* Submit jobs: `POST /jobs` with JSON payload
-
-```json
-
-```
-
-2. Run Worker service (scales with multiple instances):
-
-```
-./worker
-```
-
-3. Monitor with Prometheus/Grafana:
-
-* Access dashboards at `localhost:3000` after setup.
-
-4. Deploy to Kubernetes:
-
-```
-helm install resilient-job ./charts/resilientjobgo
-```
+## Future Plans
+- **High Priority: AI Integration**: Add fraud detection via Django server (Torch model for anomaly scoring). Run as sidecar/separate service; integrate with payment-worker for real-time analysis.
+- **Security**: Integrate Keycloak for authN/authZ, OAuth2/OIDC, RBAC, certificate management.
+- **Optimization**: Tune concurrent processing (semaphores to autoscaling), high-availability DB (read replicas, failover).
+- **Testing/Deployment**: Expand JMeter for 10k+ loads; Minikube with HPA autoscaling; CI/CD via GitHub Actions (build/test/deploy).
+- **Other**: Multi-tenancy (tenantID partitions), more metrics (e.g., latency histograms).
 
 ## Contributing
 
@@ -104,7 +73,5 @@ See [CHANGELOG.md](CHANGELOG.md) for releases following semantic versioning.
 ## Security
 
 Report vulnerabilities via [SECURITY.md](SECURITY.md).
-
 ## License
-
-See [LICENSE.md](LICENSE.md).
+MIT - see [LICENSE.md](LICENSE.md).

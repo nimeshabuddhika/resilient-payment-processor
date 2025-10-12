@@ -20,7 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// PaymentProcessor defines the interface for processing payment jobs end-to-end.
+// PaymentProcessor defines the interface for processing payment jobs end-to-end for payment-worker service.
+// It encapsulates the business logic for handling payment transactions, including fraud detection, retry handling, and database operations.
 type PaymentProcessor interface {
 	ProcessPayment(ctx context.Context, paymentJob views.PaymentJob) error
 }

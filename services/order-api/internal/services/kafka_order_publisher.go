@@ -23,7 +23,7 @@ type KafkaPublisherImpl struct {
 	cnf      *configs.Config
 }
 
-// NewKafkaPublisher creates and initializes a KafkaPublisher with the provided logger and configuration parameters.
+// NewKafkaPublisher creates and initializes a KafkaPublisher with the provided logger and configuration parameters for order-api service.
 func NewKafkaPublisher(logger *zap.Logger, ctx context.Context, cnf *configs.Config) KafkaPublisher {
 	// Initialize Kafka topics
 	topicConfig := kafkautils.KafkaConfig{
