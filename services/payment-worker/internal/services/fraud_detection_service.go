@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"go.uber.org/zap"
 )
@@ -30,7 +30,7 @@ type FraudStatus struct {
 
 // FraudDetector defines the interface for fraud detection operations
 type FraudDetector interface {
-	Analyze(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, paymentJob views.PaymentJob)
+	Analyze(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, paymentJob dtos.PaymentJob)
 }
 
 // FraudDetectorConfig holds configuration for fraud detection service
@@ -56,7 +56,7 @@ func NewFraudDetectionService(fdConf FraudDetectorConfig) FraudDetector {
 //   - Integrate ML model for advanced fraud detection
 //   - Implement event-driven communication via Kafka
 //   - Connect with AI-based Python/Django service for real-time analysis
-func (f *FraudDetectorConfig) Analyze(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, job views.PaymentJob) {
+func (f *FraudDetectorConfig) Analyze(ctx context.Context, wg *sync.WaitGroup, statusChan chan<- FraudStatus, amount float64, job dtos.PaymentJob) {
 	defer wg.Done()
 	// simulate processing time with context cancellation support
 	select {

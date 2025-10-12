@@ -6,14 +6,14 @@ import (
 	"fmt"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	"go.uber.org/zap"
 )
 
 type KafkaPublisher interface {
-	PublishOrder(paymentJob views.PaymentJob) error
+	PublishOrder(paymentJob dtos.PaymentJob) error
 	Close()
 }
 
@@ -42,7 +42,7 @@ func NewKafkaPublisher(logger *zap.Logger, ctx context.Context, cnf *configs.Con
 	}
 	err := kafkautils.InitKafkaTopics(logger, ctx, topicConfig)
 	if err != nil {
-		logger.Fatal("failed to initialize kafka topics", zap.Error(err))
+		logger.Fatal("failed_to_initialize_kafka_topics", zap.Error(err))
 	}
 
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
@@ -54,7 +54,7 @@ func NewKafkaPublisher(logger *zap.Logger, ctx context.Context, cnf *configs.Con
 	if err != nil {
 		logger.Fatal("failed to create kafka producer", zap.Error(err))
 	}
-	logger.Info("kafka producer created successfully", zap.String("brokers", cnf.KafkaBrokers))
+	logger.Info("kafka_producer_created_successfully", zap.String("brokers", cnf.KafkaBrokers))
 	go handleDeliveryReports(logger, p) // Async error handling
 	return &KafkaPublisherImpl{
 		logger:   logger,
@@ -63,7 +63,7 @@ func NewKafkaPublisher(logger *zap.Logger, ctx context.Context, cnf *configs.Con
 	}
 }
 
-func (k KafkaPublisherImpl) PublishOrder(paymentJob views.PaymentJob) error {
+func (k KafkaPublisherImpl) PublishOrder(paymentJob dtos.PaymentJob) error {
 	// Serialize the order payload to JSON for Kafka transport
 	msgBytes, err := json.Marshal(paymentJob)
 	if err != nil {
@@ -93,7 +93,7 @@ func handleDeliveryReports(logger *zap.Logger, p *kafka.Producer) {
 		switch ev := e.(type) {
 		case *kafka.Message:
 			if ev.TopicPartition.Error != nil {
-				logger.Error("failed to publish message", zap.Error(ev.TopicPartition.Error))
+				logger.Error("failed_to_publish_message", zap.Error(ev.TopicPartition.Error))
 			}
 		}
 	}

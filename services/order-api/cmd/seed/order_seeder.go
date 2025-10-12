@@ -36,7 +36,7 @@ type SeedOrderConfig struct {
 }
 
 func main() {
-	noOfOrders := flag.Int("noOfOrders", 300, "Number of orders to seed")
+	noOfOrders := flag.Int("noOfOrders", 100, "Number of orders to seed")
 	maxConcurrentRequests := flag.Int("maxConcurrentRequests", 5, "Max concurrent requests")
 	maxAccountPerUser := flag.Int("maxAccountPerUser", 1, "Max number of accounts per user to seed")
 	noOfOrdersPerAccount := flag.Int("noOfOrdersPerAccount", 1, "Number of orders per account to seed")
@@ -53,7 +53,7 @@ func main() {
 
 	cfg, err := configs.Load(logger)
 	if err != nil {
-		logger.Fatal("failed to load config", zap.Error(err))
+		logger.Fatal("failed_to_load_config", zap.Error(err))
 	}
 	logger.Info("Config loaded successfully")
 
@@ -70,9 +70,9 @@ func main() {
 		logger.Fatal("failed to init DB", zap.Error(err))
 	}
 	defer closer()
-	logger.Info("DB initialized successfully")
+	logger.Info("db_initialized_successfully")
 
-	logger.Info("Seeding data")
+	logger.Info("seeding_data")
 
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository()
@@ -84,10 +84,10 @@ func main() {
 		minOrder, maxOrder = maxOrder, minOrder
 	}
 	if *maxAccountPerUser > 100 {
-		logger.Fatal("maxAccountPerUser cannot be greater than 100")
+		logger.Fatal("maxAccountPerUser_cannot_be_greater_than_100")
 	}
 	if *noOfOrdersPerAccount > 100 {
-		logger.Fatal("noOfOrdersPerAccount cannot be greater than 100")
+		logger.Fatal("noOfOrdersPerAccount_cannot_be_greater_than_100")
 	}
 
 	// Initialize seeder
@@ -119,7 +119,7 @@ type SeedOrder struct {
 
 func (c *SeedOrderConfig) Start(totalOrders int) {
 	startTime := time.Now()
-	c.logger.Info("Starting seeding", zap.Int("no_of_orders", totalOrders), zap.Uint32("no_of_concurrent_requests", c.noOfConcurrentRequests))
+	c.logger.Info("start_seeding", zap.Int("no_of_orders", totalOrders), zap.Uint32("no_of_concurrent_requests", c.noOfConcurrentRequests))
 
 	totalRemaining := totalOrders
 	userPageNumber := 1 // Start from page 1
@@ -129,11 +129,11 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 		// Get users
 		users, err := c.userRepo.GetUsers(c.db, c.ctx, userPageNumber, userPageSize)
 		if err != nil {
-			c.logger.Fatal("failed to get users", zap.Error(err))
+			c.logger.Fatal("failed_to_get_users", zap.Error(err))
 		}
 		if len(users) == 0 {
 			if totalRemaining > 0 {
-				c.logger.Fatal("not enough users to seed all orders", zap.Int("remaining", totalRemaining))
+				c.logger.Fatal("not_enough_users_to_seed_all_orders", zap.Int("remaining", totalRemaining))
 			}
 			break
 		}
@@ -142,12 +142,12 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 			if totalRemaining <= 0 {
 				break
 			}
-			c.logger.Info("Processing user", zap.String("username", user.Username))
+			c.logger.Info("processing_user", zap.String("username", user.Username))
 
 			// Fetch user accounts
 			accounts, err := c.accountRepo.GetAccountsByUserID(c.db, c.ctx, user.ID, 1, int(c.noOfAccountPerUser))
 			if err != nil {
-				c.logger.Fatal("failed to get accounts", zap.Error(err))
+				c.logger.Fatal("failed_to_get_accounts", zap.Error(err))
 			}
 
 			for _, account := range accounts {
@@ -155,7 +155,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 					break
 				}
 
-				c.logger.Info("Processing account", zap.String("account_id", account.ID.String()))
+				c.logger.Info("processing_account", zap.String("account_id", account.ID.String()))
 
 				for j := 1; j <= int(c.noOfOrdersPerAccount) && totalRemaining > 0; j++ {
 					orderRequest := SeedOrder{
@@ -178,10 +178,10 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 	}
 
 	duration := time.Since(startTime)
-	c.logger.Info("Waiting for all requests to complete", zap.Int("remaining", totalRemaining), zap.Duration("duration", duration))
+	c.logger.Info("waiting_for_all_requests_to_complete", zap.Int("remaining", totalRemaining), zap.Duration("duration", duration))
 	c.wg.Wait()
 	duration = time.Since(startTime)
-	c.logger.Info("Seeding completed", zap.Duration("duration", duration))
+	c.logger.Info("seeding_completed", zap.Duration("duration", duration))
 }
 
 func (c *SeedOrderConfig) seedOrder(userId uuid.UUID, request SeedOrder) {
@@ -194,12 +194,12 @@ func (c *SeedOrderConfig) seedOrder(userId uuid.UUID, request SeedOrder) {
 	}
 	defer func() { <-c.requestSemaphore }()
 
-	c.logger.Info("Seeding order", zap.Any(pkg.IdempotencyKey, request.IdempotencyID))
+	c.logger.Info("seeding_order", zap.Any(pkg.IdempotencyKey, request.IdempotencyID))
 
 	// Send request to order API
 	c.postRequest(userId, request)
 
-	c.logger.Info("Order seeded successfully", zap.Any(pkg.IdempotencyKey, request.IdempotencyID))
+	c.logger.Info("order_seeded_successfully", zap.Any(pkg.IdempotencyKey, request.IdempotencyID))
 }
 
 // postRequest sends a POST request to the order API
@@ -215,14 +215,14 @@ func (c *SeedOrderConfig) postRequest(userId uuid.UUID, request SeedOrder) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		c.logger.Error("API call failed", zap.Error(err))
+		c.logger.Error("api_call_failed", zap.Error(err))
 	}
 	defer resp.Body.Close()
 
 	if http.StatusCreated != resp.StatusCode {
-		c.logger.Error("API call failed", zap.Any(pkg.IdempotencyKey, request.IdempotencyID), zap.Int("status_code", resp.StatusCode))
+		c.logger.Error("api_call_failed", zap.Any(pkg.IdempotencyKey, request.IdempotencyID), zap.Int("status_code", resp.StatusCode))
 		return
 	}
 	traceId := resp.Header.Get(pkg.HeaderTraceId)
-	c.logger.Info("API call completed", zap.Any(pkg.IdempotencyKey, request.IdempotencyID), zap.String(pkg.TraceId, traceId))
+	c.logger.Info("api_call_completed", zap.Any(pkg.IdempotencyKey, request.IdempotencyID), zap.String(pkg.TraceId, traceId))
 }
