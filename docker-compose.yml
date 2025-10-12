@@ -1,0 +1,195 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-data:/var/lib/zookeeper/log
+      - zookeeper-secrets:/etc/zookeeper/secrets
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092" # host access
+      - "29092:29092"      # optional: expose internal listener for debugging
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+      - kafka-secrets:/etc/kafka/secrets
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8180:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      - kafka
+
+  postgres:
+    image: postgres:17.5
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: db_user # For local development only
+      POSTGRES_PASSWORD: db_password # For local development only
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./configs/postgres/1_db_init.sh:/docker-entrypoint-initdb.d/1_db_init.sh:ro # Create `resilient_payment_processor` database and `service_schema` schema
+
+  order-api:
+    image: order-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.order-api
+    profiles:
+      - services
+    container_name: order-api
+    restart: unless-stopped
+    ports:
+      - "8081:8081"  # Expose for local access
+    environment:
+      GIN_MODE: "release"
+      APP_PORT: "8081"
+      APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU="
+      APP_KAFKA_BROKERS: "kafka:29092" # For local development only
+      APP_KAFKA_ORDER_TOPIC: "orders-placed"
+      APP_KAFKA_ORDER_RETENTION: "24h"
+      APP_PRIMARY_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
+      APP_REPLICA_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
+      APP_MAX_DB_CONNECTIONS: "20"
+      APP_MIN_DB_CONNECTIONS: "5"
+    depends_on:
+      - kafka
+      - postgres
+    labels: {
+      logging: "promtail"
+    }
+
+  payment-worker:
+    image: payment-worker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.payment-worker
+    profiles:
+      - services
+    restart: unless-stopped
+    deploy:
+      mode: replicated
+      replicas: 2
+    environment:
+      GIN_MODE: "release"
+      APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
+      APP_KAFKA_BROKERS: "kafka:29092" # For local development only
+      APP_KAFKA_ORDER_TOPIC: "orders-placed"
+      APP_KAFKA_DLQ_TOPIC: "orders-placed-dlq"
+      APP_KAFKA_DLQ_RETENTION: "48h"
+      APP_KAFKA_RETRY_TOPIC: "orders-retry"
+      APP_KAFKA_RETRY_RETENTION: "48h"
+      APP_KAFKA_RETRY_DLQ_TOPIC: "orders-retry-dlq"
+      APP_KAFKA_RETRY_DLQ_RETENTION: "168h"
+      APP_KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
+      APP_PRIMARY_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
+      APP_MAX_DB_CONNECTIONS: "5"
+      APP_MIN_DB_CONNECTIONS: "1"
+      APP_REDIS_ADDR: "redis:6379"
+      APP_RETRY_BASE_BACKOFF: "30s"
+      APP_MAX_RETRY_BACKOFF: "5m"
+      APP_MAX_RETRY_COUNT: "3"
+      APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "20"
+      APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "20"
+    depends_on:
+      - kafka
+      - postgres
+      - redis
+    labels: {
+      logging: "promtail"
+    }
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"  # Web UI
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml  # Mount config
+      - prometheus-data:/prometheus  # Persistence
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+  grafana:
+    image: grafana/grafana:12.2
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # Web UI (admin/admin default)
+    volumes:
+      - grafana-data:/var/lib/grafana  # Persistence
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning  # data sources
+      - ./configs/grafana/dashboards:/etc/grafana/dashboards  # dashboards
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin  # For local development only
+    depends_on:
+      - prometheus
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    hostname: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: loki
+    restart: unless-stopped
+    volumes:
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - ./configs/promtail/promtail-config.yaml:/etc/promtail/docker-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/docker-config.yaml
+    depends_on:
+      - loki
+
+volumes:
+  pg-data:
+  prometheus-data:
+  grafana-data:
+  kafka-data:
+  kafka-secrets:
+  zookeeper-data:
+  zookeeper-secrets:
+  redis-data:
+  loki-data:

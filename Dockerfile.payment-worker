@@ -1,0 +1,40 @@
+# Multi-stage build for payment-worker with Confluent Kafka (CGO)
+# Build stage
+FROM golang:1.25 AS builder
+
+# Install build deps for confluent-kafka-go (requires CGO and librdkafka)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config librdkafka-dev ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+# Leverage Go modules cache
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the whole repo to build with internal libs
+COPY . .
+
+# Build with CGO enabled for confluent-kafka-go (build for native container arch)
+ENV CGO_ENABLED=1
+RUN go build -ldflags="-s -w" -o /out/payment-worker ./services/payment-worker/cmd
+
+# Runtime stage with librdkafka runtime libs
+FROM debian:12-slim
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates librdkafka1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -u 65532 -r -g nogroup -s /usr/sbin/nologin nonroot
+
+# Copy binary
+COPY --from=builder /out/payment-worker /app/payment-worker
+
+# Run as non-root
+USER 65532:65532
+
+ENTRYPOINT ["/app/payment-worker"]
