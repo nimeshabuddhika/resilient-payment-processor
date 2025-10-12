@@ -4,11 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"syscall"
 	"testing"
 	"time"
 
@@ -17,79 +12,6 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/tests"
 	"github.com/stretchr/testify/assert"
 )
-
-// buildAndStartPaymentWorker builds the payment-worker binary and starts it as a child process
-// in its own process group so we can terminate it (and any children) reliably from tests.
-func buildAndStartPaymentWorker(t *testing.T, env map[string]string) (*exec.Cmd, func()) {
-	t.Helper()
-
-	// Build a temporary binary for the worker
-	tmpDir := t.TempDir()
-	bin := filepath.Join(tmpDir, "payment-worker-testbin")
-	build := exec.Command("go", "build", "-o", bin, "../../services/payment-worker/cmd/main.go")
-	build.Stdout = os.Stdout
-	build.Stderr = os.Stderr
-	if err := build.Run(); err != nil {
-		assert.FailNow(t, "failed to build payment-worker", err.Error())
-	}
-
-	cmd := exec.Command(bin)
-
-	// Attach test-provided environment variables to the process
-	cmd.Env = os.Environ()
-	for k, v := range env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-	}
-
-	// Put the process in its own group so we can signal the whole group
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	}
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		assert.FailNow(t, "failed to start payment-worker", err.Error())
-	}
-
-	cleanup := func() {
-		if cmd.Process == nil {
-			return
-		}
-		// Try graceful shutdown first
-		if runtime.GOOS != "windows" {
-			pgid, err := syscall.Getpgid(cmd.Process.Pid)
-			if err == nil {
-				_ = syscall.Kill(-pgid, syscall.SIGINT)
-			} else {
-				_ = cmd.Process.Signal(syscall.SIGINT)
-			}
-		} else {
-			_ = cmd.Process.Kill()
-		}
-		// Wait with timeout, then force kill if needed
-		done := make(chan struct{})
-		go func() {
-			_ = cmd.Wait()
-			close(done)
-		}()
-		select {
-		case <-done:
-			return
-		case <-time.After(10 * time.Second):
-			if runtime.GOOS != "windows" {
-				pgid, err := syscall.Getpgid(cmd.Process.Pid)
-				if err == nil {
-					_ = syscall.Kill(-pgid, syscall.SIGKILL)
-				}
-			}
-			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
-		}
-	}
-
-	return cmd, cleanup
-}
 
 // createDLQConsumer creates a Kafka consumer subscribed to the given dlqTopic
 // and waits for assignment to reduce flakiness.
@@ -158,11 +80,15 @@ func TestPaymentWorkerKafkaOrderHandler_DLQOnInvalidMessage(t *testing.T) {
 	env := map[string]string{
 		"GIN_MODE":                              "test",
 		"APP_KAFKA_BROKERS":                     kBootstrap,
-		"APP_KAFKA_CONSUMER_GROUP":              "pw-" + uuid.NewString(),
-		"APP_KAFKA_TOPIC":                       ordersTopic,
+		"APP_KAFKA_ORDER_CONSUMER_GROUP":        "order-gp-" + uuid.NewString(),
+		"APP_KAFKA_RETRY_CONSUMER_GROUP":        "retry-gp-" + uuid.NewString(),
+		"APP_KAFKA_ORDER_TOPIC":                 ordersTopic,
 		"APP_KAFKA_DLQ_TOPIC":                   dlqTopic,
+		"APP_KAFKA_DLQ_RETENTION":               "168h",
 		"APP_KAFKA_RETRY_TOPIC":                 retryTopic,
 		"APP_KAFKA_RETRY_DLQ_TOPIC":             retryDLQTopic,
+		"APP_KAFKA_RETRY_RETENTION":             "168h",
+		"APP_KAFKA_RETRY_DLQ_RETENTION":         "168h",
 		"APP_PRIMARY_DB_ADDR":                   dsnNoProto,
 		"APP_REPLICA_DB_ADDR":                   dsnNoProto,
 		"APP_AES_KEY":                           "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=",
@@ -172,10 +98,12 @@ func TestPaymentWorkerKafkaOrderHandler_DLQOnInvalidMessage(t *testing.T) {
 		"APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS": "2",
 		"APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS":  "2",
 		"APP_MAX_RETRY_COUNT":                   "3",
+		"APP_MAX_DB_CONNECTIONS":                "2",
+		"APP_MIN_DB_CONNECTIONS":                "1",
 	}
 
 	// Start payment-worker as a real binary so we can terminate it cleanly.
-	_, stopWorker := buildAndStartPaymentWorker(t, env)
+	_, stopWorker := tests.BuildAndStartPaymentWorker(t, env)
 	t.Cleanup(stopWorker)
 
 	// Give the worker a moment to initialize.

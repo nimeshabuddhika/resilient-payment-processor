@@ -3,12 +3,12 @@ package pkg
 const (
 	HeaderTraceId   string = "X-Trace-Id"
 	HeaderRequestId string = "X-Request-Id"
+	HeaderUserId    string = "user_id"
 )
 
 const (
 	TraceId        string = "trace_id"
 	RequestId      string = "request_id"
-	UserId         string = "user_id"
 	IdempotencyKey string = "idempotency_key"
 )
 

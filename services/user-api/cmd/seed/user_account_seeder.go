@@ -56,14 +56,14 @@ func main() {
 	ctx := context.Background()
 	db, closer, err := database.New(ctx, logger, dbConfig)
 	if err != nil {
-		logger.Fatal("failed to init DB", zap.Error(err))
+		logger.Fatal("failed_to_init_DB", zap.Error(err))
 	}
 	defer closer()
 
 	// Initialize db migrations
 	err = database.RunMigrations(logger, cfg.PrimaryDbAddr)
 	if err != nil {
-		logger.Fatal("failed to run database migrations", zap.Error(err))
+		logger.Fatal("failed_to_run_database_migrations", zap.Error(err))
 	}
 
 	// Initialize user repository
@@ -85,7 +85,7 @@ func main() {
 		for i := 1; i <= *noOfUsers; i++ {
 			userID := uuid.New()
 			// Create users (ON CONFLICT DO NOTHING to allow re-runs).
-			logger.Info("Creating user", zap.Int("i", i), zap.Any("userId", userID))
+			logger.Info("creating_user", zap.Int("i", i), zap.Any("user_id", userID))
 
 			_, err = userRepo.Create(ctx, tx, models.User{
 				ID:        userID,
@@ -128,7 +128,7 @@ func main() {
 					if isFraud {
 						amt = 1000.0 + rand.Float64()*4000.0 // Anomaly.
 					}
-					logger.Info("Creating order", zap.Any("userId", userID), zap.Any("accountId", accID), zap.Float64("amt", amt), zap.Bool("isFraud", isFraud))
+					logger.Info("creating_order", zap.Any("user_id", userID), zap.Any("account_id", accID), zap.Float64("amt", amt), zap.Bool("is_fraud", isFraud))
 
 					//encrypt amount
 					amtEnc, err := utils.EncryptAES(utils.Float64ToByte(amt), key)
@@ -155,7 +155,7 @@ func main() {
 	})
 
 	if err != nil {
-		logger.Fatal("failed to seed data", zap.Error(err))
+		logger.Fatal("failed_to_seed_data", zap.Error(err))
 	}
-	logger.Info("Data seeded successfully")
+	logger.Info("data_seeded_successfully")
 }

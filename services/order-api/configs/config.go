@@ -38,10 +38,10 @@ func Load(logger *zap.Logger) (*Config, error) {
 	if gin.ReleaseMode == gin.Mode() {
 		viper.SetConfigName("config.prod")
 	} else if gin.TestMode == gin.Mode() {
-		logger.Warn("running in test mode")
+		logger.Warn("running_in_test_mode")
 		viper.SetConfigName("config.test")
 	} else {
-		logger.Warn("running in development mode")
+		logger.Warn("running_in_development_mode")
 		viper.SetConfigName("config.dev")
 	}
 	viper.SetConfigType("yaml")

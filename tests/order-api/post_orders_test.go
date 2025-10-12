@@ -27,7 +27,7 @@ func TestCreateOrder_Success(t *testing.T) {
 		"transactionType": "PURCHASE",
 	}
 
-	headers := map[string]string{pkg.UserId: userID.String()}
+	headers := map[string]string{pkg.HeaderUserId: userID.String()}
 
 	// Act
 	resp, err := tests.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
@@ -58,7 +58,7 @@ func TestCreateOrder_InvalidAmount_Less_Than_minimum(t *testing.T) {
 		"currency":      "USD",
 	}
 
-	headers := map[string]string{pkg.UserId: userID.String()}
+	headers := map[string]string{pkg.HeaderUserId: userID.String()}
 
 	resp, err := tests.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)
 	assert.NoError(t, err)

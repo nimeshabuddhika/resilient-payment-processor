@@ -21,7 +21,8 @@ type Config struct {
 	KafkaOrderTopic               string        `mapstructure:"KAFKA_ORDER_TOPIC" validate:"required"`
 	KafkaDLQTopic                 string        `mapstructure:"KAFKA_DLQ_TOPIC" validate:"required"`
 	KafkaDLQRetention             time.Duration `mapstructure:"KAFKA_DLQ_RETENTION" validate:"required"`
-	KafkaConsumerGroup            string        `mapstructure:"KAFKA_CONSUMER_GROUP" validate:"required"`
+	KafkaOrderConsumerGroup       string        `mapstructure:"KAFKA_ORDER_CONSUMER_GROUP" validate:"required"`
+	KafkaRetryConsumerGroup       string        `mapstructure:"KAFKA_RETRY_CONSUMER_GROUP" validate:"required"`
 	KafkaRetryTopic               string        `mapstructure:"KAFKA_RETRY_TOPIC" validate:"required"`
 	KafkaRetryDLQTopic            string        `mapstructure:"KAFKA_RETRY_DLQ_TOPIC" validate:"required"`
 	KafkaRetryRetention           time.Duration `mapstructure:"KAFKA_RETRY_RETENTION" validate:"required"`
@@ -50,10 +51,10 @@ func Load(logger *zap.Logger) (*Config, error) {
 	if gin.ReleaseMode == gin.Mode() {
 		viper.SetConfigName("config.prod")
 	} else if gin.TestMode == gin.Mode() {
-		logger.Warn("running in test mode")
+		logger.Warn("running_in_test_mode")
 		viper.SetConfigName("config.test")
 	} else {
-		logger.Warn("running in development mode")
+		logger.Warn("running_in_development_mode")
 		viper.SetConfigName("config.dev")
 	}
 	viper.SetConfigType("yaml")
