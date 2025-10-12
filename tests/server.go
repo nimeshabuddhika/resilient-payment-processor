@@ -75,7 +75,8 @@ func StartOrderAPIServer(t *testing.T) (baseURL string, cleanup func()) {
 	// Configure environment variables
 	_ = os.Setenv("APP_PORT", fmt.Sprintf("%d", port))
 	_ = os.Setenv("APP_KAFKA_BROKERS", kBootstrap)
-	_ = os.Setenv("APP_KAFKA_TOPIC", kafkaTopic)
+	_ = os.Setenv("APP_KAFKA_ORDER_TOPIC", kafkaTopic)
+	_ = os.Setenv("APP_KAFKA_ORDER_RETENTION", orderRetention)
 	_ = os.Setenv("APP_AES_KEY", "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=")
 	_ = os.Setenv("APP_PRIMARY_DB_ADDR", dsnNoProto)
 	_ = os.Setenv("APP_REPLICA_DB_ADDR", dsnNoProto)
@@ -131,6 +132,7 @@ var seededUserID uuid.UUID
 var seededAccountID uuid.UUID
 var kafkaBootstrap string
 var kafkaTopic string = "orders-test"
+var orderRetention string = "24h"
 
 func GetSeededIDs() (userID uuid.UUID, accountID uuid.UUID) {
 	return seededUserID, seededAccountID
@@ -182,28 +184,6 @@ func startPostgresForTests() (dsnNoProto string, terminate func(), err error) {
 		return
 	}
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port.Port(), dbName)
-
-	// Prepare DB: create extension and schema
-	if e := func() error {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		conn, err := pgx.Connect(cctx, connStr)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = conn.Close(cctx) }()
-		if _, err := conn.Exec(cctx, "CREATE EXTENSION IF NOT EXISTS pgcrypto;"); err != nil {
-			return err
-		}
-		if _, err := conn.Exec(cctx, "CREATE SCHEMA IF NOT EXISTS svc_schema;"); err != nil {
-			return err
-		}
-		return nil
-	}(); e != nil {
-		_ = pgC.Terminate(context.Background())
-		err = fmt.Errorf("failed to prepare postgres database: %w", e)
-		return
-	}
 
 	terminate = func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

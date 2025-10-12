@@ -7,6 +7,7 @@ import (
 
 	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/google/uuid"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/tests"
 	"github.com/stretchr/testify/assert"
 )
@@ -60,7 +61,7 @@ func TestKafkaPublish_Success(t *testing.T) {
 		"ipAddress":       "127.0.0.1",
 		"transactionType": "PURCHASE",
 	}
-	headers := map[string]string{"userId": userID.String()}
+	headers := map[string]string{pkg.HeaderUserId: userID.String()}
 
 	// Act: create order which should publish to Kafka
 	resp, err := tests.PostRequestWithHeaders(t, baseURL+"/api/v1/orders", payload, headers)

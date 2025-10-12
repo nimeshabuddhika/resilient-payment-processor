@@ -5,7 +5,8 @@ KAFKA_BROKERS: "localhost:9092" # For local development only
 KAFKA_ORDER_TOPIC: "orders-placed"
 KAFKA_DLQ_TOPIC: "orders-placed-dlq"
 KAFKA_DLQ_RETENTION: "48h"
-KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
+KAFKA_ORDER_CONSUMER_GROUP: "payment-order-workers"
+KAFKA_RETRY_CONSUMER_GROUP: "payment-retry-workers"
 KAFKA_RETRY_TOPIC: "orders-retry"
 KAFKA_RETRY_DLQ_TOPIC: "orders-retry-dlq"
 KAFKA_RETRY_RETENTION: "24h"
