@@ -1,6 +1,8 @@
 package configs
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
@@ -9,16 +11,16 @@ import (
 )
 
 type Config struct {
-	Port           string `mapstructure:"PORT" validate:"required"`
-	KafkaBrokers   string `mapstructure:"KAFKA_BROKERS" validate:"required"`
-	PrimaryDbAddr  string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
-	ReplicaDbAddr  string `mapstructure:"REPLICA_DB_ADDR"`
-	MaxDbCons      int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
-	MinDbCons      int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
-	KafkaRetry     int    `mapstructure:"KAFKA_RETRY" validate:"min=1"`
-	KafkaPartition uint32 `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
-	KafkaTopic     string `mapstructure:"KAFKA_TOPIC" validate:"required"`
-	AesKey         string `mapstructure:"AES_KEY" validate:"required"`
+	Port                string        `mapstructure:"PORT" validate:"required"`
+	KafkaBrokers        string        `mapstructure:"KAFKA_BROKERS" validate:"required"`
+	PrimaryDbAddr       string        `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
+	ReplicaDbAddr       string        `mapstructure:"REPLICA_DB_ADDR"`
+	MaxDbCons           int32         `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
+	MinDbCons           int32         `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
+	KafkaPartition      uint32        `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
+	KafkaOrderTopic     string        `mapstructure:"KAFKA_ORDER_TOPIC" validate:"required"`
+	KafkaOrderRetention time.Duration `mapstructure:"KAFKA_ORDER_RETENTION" validate:"required"`
+	AesKey              string        `mapstructure:"AES_KEY" validate:"required"`
 }
 
 func Load(logger *zap.Logger) (*Config, error) {

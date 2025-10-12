@@ -17,19 +17,21 @@ type Config struct {
 	ReplicaDbAddr                 string        `mapstructure:"REPLICA_DB_ADDR"`
 	MaxDbCons                     int32         `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
 	MinDbCons                     int32         `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
-	KafkaRetry                    int           `mapstructure:"KAFKA_RETRY" validate:"min=1"`
 	KafkaPartition                uint32        `mapstructure:"KAFKA_PARTITION" validate:"min=1"`
-	KafkaTopic                    string        `mapstructure:"KAFKA_TOPIC" validate:"required"`
+	KafkaOrderTopic               string        `mapstructure:"KAFKA_ORDER_TOPIC" validate:"required"`
 	KafkaDLQTopic                 string        `mapstructure:"KAFKA_DLQ_TOPIC" validate:"required"`
+	KafkaDLQRetention             time.Duration `mapstructure:"KAFKA_DLQ_RETENTION" validate:"required"`
 	KafkaConsumerGroup            string        `mapstructure:"KAFKA_CONSUMER_GROUP" validate:"required"`
 	KafkaRetryTopic               string        `mapstructure:"KAFKA_RETRY_TOPIC" validate:"required"`
 	KafkaRetryDLQTopic            string        `mapstructure:"KAFKA_RETRY_DLQ_TOPIC" validate:"required"`
+	KafkaRetryRetention           time.Duration `mapstructure:"KAFKA_RETRY_RETENTION" validate:"required"`
+	KafkaRetryDLQRetention        time.Duration `mapstructure:"KAFKA_RETRY_DLQ_RETENTION" validate:"required"`
 	RetryBaseBackoff              time.Duration `mapstructure:"RETRY_BASE_BACKOFF" validate:"required"`
 	MaxRetryBackoff               time.Duration `mapstructure:"MAX_RETRY_BACKOFF" validate:"required"`
+	MaxRetryCount                 int           `mapstructure:"MAX_RETRY_COUNT" validate:"min=1,max=5"`
 	AesKey                        string        `mapstructure:"AES_KEY" validate:"required"`
 	RedisAddr                     string        `mapstructure:"REDIS_ADDR" validate:"required"`
 	MaxReplicaRateLimit           int           `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
-	MaxRetryCount                 int           `mapstructure:"MAX_RETRY_COUNT" validate:"min=1,max=5"`
 	MaxOrdersPlacedConcurrentJobs int           `mapstructure:"MAX_ORDERS_PLACED_CONCURRENT_JOBS" validate:"min=1"`
 	MaxOrdersRetryConcurrentJobs  int           `mapstructure:"MAX_ORDERS_RETRY_CONCURRENT_JOBS" validate:"min=1"`
 }
@@ -39,8 +41,6 @@ func Load(logger *zap.Logger) (*Config, error) {
 	viper.AutomaticEnv()
 
 	// Default values
-	viper.SetDefault("MAX_DB_CONNECTIONS", "10")
-	viper.SetDefault("MIN_DB_CONNECTIONS", "2")
 	viper.SetDefault("KAFKA_RETRY", "3")
 	viper.SetDefault("KAFKA_PARTITION", "4")
 	viper.SetDefault("MAX_REPLICA_RATE_LIMIT", "10")
@@ -64,8 +64,6 @@ func Load(logger *zap.Logger) (*Config, error) {
 	if err := utils.ParseStructEnv(&cfg); err != nil {
 		return nil, err
 	}
-
-	logger.Debug("config loaded", zap.Int("order_placed_concurrent_jobs", cfg.MaxOrdersPlacedConcurrentJobs), zap.Int("order_retry_placed_concurrent_jobs", cfg.MaxOrdersRetryConcurrentJobs)) // TODO TOBE REMOVED
 
 	// Validate after unmarshal
 	validate := validator.New()

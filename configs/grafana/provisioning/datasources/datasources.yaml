@@ -1,8 +1,16 @@
 datasources:
-  - name: "ResilientJobGo Metrics"
+  - name: "Payment Platform Metrics"
     type: prometheus
     access: proxy
     url: http://prometheus:9090  # Internal
     isDefault: true
     jsonData:
       timeInterval: 30s
+  - name: "Payment Platform Logs"
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    jsonData:
+      maxLines: 1000  # Limit for queries
+    version: 1

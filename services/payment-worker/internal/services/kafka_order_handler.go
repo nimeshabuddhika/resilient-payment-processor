@@ -3,11 +3,14 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
+	"github.com/bytedance/gopkg/util/logger"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/go-playground/validator/v10"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
+	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"go.uber.org/zap"
@@ -35,6 +38,25 @@ type KafkaOrderConfig struct {
 // NewKafkaOrderConsumer initializes a KafkaOrderHandler with the provided configuration.
 // It sets up the Kafka consumer, DLQ producer, and semaphore based on config values.
 func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
+	// Initialize kafka topic configuration
+	topicConfig := kafkautils.KafkaConfig{
+		BootstrapServers: cfg.Config.KafkaBrokers,
+		Topics: []kafkautils.TopicConfig{
+			{
+				Topic:             cfg.Config.KafkaDLQTopic,
+				NumPartitions:     int(cfg.Config.KafkaPartition),
+				ReplicationFactor: 1, // Single partition
+				Config: map[string]string{
+					"retention.ms": fmt.Sprintf("%d", cfg.Config.KafkaDLQRetention.Milliseconds()),
+				},
+			},
+		},
+	}
+	err := kafkautils.InitKafkaTopics(cfg.Logger, cfg.Context, topicConfig)
+	if err != nil {
+		logger.Fatal("failed to initialize kafka topics", zap.Error(err))
+	}
+
 	// Configure Kafka consumer settings
 	kafkaConfig := &kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers,       // List of Kafka broker addresses
@@ -59,7 +81,7 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 
 	// Initialize semaphore with configured max concurrent jobs
 	cfg.orderSem = make(chan struct{}, cfg.Config.MaxOrdersPlacedConcurrentJobs)
-	cfg.Logger.Info("Initialized order semaphore", zap.Int("semaphore_size", cfg.Config.MaxOrdersPlacedConcurrentJobs))
+	cfg.Logger.Info("Initialized order semaphore", zap.Int("order_concurrent_limit", cfg.Config.MaxOrdersPlacedConcurrentJobs))
 	cfg.consumer = kafkaConsumer
 	cfg.dlqProducer = dlqProducer
 	cfg.validate = validator.New()
@@ -70,13 +92,13 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 // The loop runs in a goroutine, processing messages with concurrency control.
 func (k *KafkaOrderConfig) Start() func() {
 	// Subscribe to the configured Kafka topic
-	err := k.consumer.SubscribeTopics([]string{k.Config.KafkaTopic}, nil)
+	err := k.consumer.SubscribeTopics([]string{k.Config.KafkaOrderTopic}, nil)
 	if err != nil {
 		k.Logger.Fatal("Failed to subscribe to Kafka topic", zap.Error(err))
 	}
 
 	k.Logger.Info("Listening to Kafka topic",
-		zap.String("topic", k.Config.KafkaTopic),
+		zap.String("topic", k.Config.KafkaOrderTopic),
 		zap.String("group", k.Config.KafkaConsumerGroup))
 	go func() {
 		for {
@@ -85,7 +107,7 @@ func (k *KafkaOrderConfig) Start() func() {
 				k.Logger.Error("Failed to read Kafka message", zap.Error(err))
 				continue
 			}
-			k.Logger.Info("reading order messages", zap.Int("semaphore_size", len(k.orderSem)))
+			k.Logger.Debug("reading order messages", zap.Int("semaphore_size", len(k.orderSem)))
 			// Acquire semaphore slot, blocking if limit is reached
 			k.orderSem <- struct{}{}
 			go func(m *kafka.Message) {
@@ -150,7 +172,7 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 
 	// Successfully processed, commit the offset
 	if _, err := k.consumer.CommitMessage(msg); err != nil {
-		k.Logger.Error("Failed to commit offset", zap.Error(err))
+		k.Logger.Error("Failed to commit offset", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		return
 	}
 	k.Logger.Info("Payment processed successfully",
@@ -165,7 +187,6 @@ func (k *KafkaOrderConfig) sendToDLQ(job views.PaymentJob, reason, errMsg string
 		"error":         errMsg,
 		"failedAt":      time.Now().UTC().Format(time.RFC3339Nano),
 	}
-
 	b, err := json.Marshal(payload)
 	if err != nil {
 		k.Logger.Error("Failed to marshal DLQ payload",

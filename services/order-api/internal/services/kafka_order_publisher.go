@@ -1,9 +1,12 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	"go.uber.org/zap"
@@ -21,12 +24,32 @@ type KafkaPublisherImpl struct {
 }
 
 // NewKafkaPublisher creates and initializes a KafkaPublisher with the provided logger and configuration parameters.
-func NewKafkaPublisher(logger *zap.Logger, cnf *configs.Config) KafkaPublisher {
+func NewKafkaPublisher(logger *zap.Logger, ctx context.Context, cnf *configs.Config) KafkaPublisher {
+	// Initialize Kafka topics
+	topicConfig := kafkautils.KafkaConfig{
+		BootstrapServers: cnf.KafkaBrokers,
+		Topics: []kafkautils.TopicConfig{
+			{
+				Topic:             cnf.KafkaOrderTopic,
+				NumPartitions:     int(cnf.KafkaPartition),
+				ReplicationFactor: 1, // Single partition
+				Config: map[string]string{
+					"cleanup.policy": "delete",
+					"retention.ms":   fmt.Sprintf("%d", cnf.KafkaOrderRetention.Milliseconds()),
+				},
+			},
+		},
+	}
+	err := kafkautils.InitKafkaTopics(logger, ctx, topicConfig)
+	if err != nil {
+		logger.Fatal("failed to initialize kafka topics", zap.Error(err))
+	}
+
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cnf.KafkaBrokers, // Kafka broker(s)
 		"acks":               "all",            // Wait for all replicas
 		"enable.idempotence": "true",           // Ensure messages are not sent twice
-		"retries":            cnf.KafkaRetry,   // Built-in retry mechanism
+		"retries":            "1",              // Built-in retry mechanism
 	})
 	if err != nil {
 		logger.Fatal("failed to create kafka producer", zap.Error(err))
@@ -53,7 +76,7 @@ func (k KafkaPublisherImpl) PublishOrder(paymentJob views.PaymentJob) error {
 	// Produce the message asynchronously; delivery results are handled by handleDeliveryReports
 	return k.producer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{
-			Topic:     &k.cnf.KafkaTopic,
+			Topic:     &k.cnf.KafkaOrderTopic,
 			Partition: partition, // target partition for ordering/affinity
 		},
 		Key:   paymentJob.IdempotencyKey[:], // key for idempotency and partitioning semantics

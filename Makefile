@@ -5,7 +5,7 @@
 # Variables
 PROJECT_NAME := resilient-payment-processor
 COMPOSE_FILE := docker-compose.yml
-SERVICES := order-api payment-worker
+RESTART_SERVICES := postgres order-api
 USER_SEED_FILE := ./services/user-api/cmd/seed/user_account_seeder.go
 ORDER_SEED_FILE := ./services/order-api/cmd/seed/order_seeder.go
 
@@ -24,21 +24,36 @@ docs-order-api: ## Generate Swagger docs for order-api
 docs: docs-order-api ## Generate all documentation
 
 ##@ Docker Management
-.PHONY: docker-up
-docker-up: ## Bring up all services with Docker Compose
-	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) up -d $(SERVICES)
+.PHONY: up
+up: ## Bring up all infrastructures services with Docker Compose
+	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) up -d
 
-.PHONY: docker-up-order-api
-docker-up-order-api: ## Bring up order-api service with Docker Compose
+.PHONY: up-services
+up-services: ## Bring up all infrastructures services and micro-services with Docker Compose
+	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) --profile services up -d
+
+.PHONY: up-order-api
+up-order-api: ## Bring up order-api service with Docker Compose
 	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) up -d order-api
 
-.PHONY: docker-up-payment-worker
-docker-up-payment-worker: ## Bring up payment-worker service with Docker Compose
+.PHONY: up-payment-worker
+up-payment-worker: ## Bring up payment-worker service with Docker Compose
 	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) up -d payment-worker
 
-.PHONY: docker-down
-docker-down: ## Bring down all services with Docker Compose
+.PHONY: down
+down: ## Bring down all services with Docker Compose
 	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) down
+
+.PHONY: docker-restart
+docker-restart: ## Restart services
+	@echo "Restarting $(RESTART_SERVICES) payment-worker"
+	docker restart $(RESTART_SERVICES)
+	@ids=$$(docker ps -aq --filter name=payment-worker); \
+		if [ -n "$$ids" ]; then \
+			docker restart $$ids; \
+		else \
+			echo "No payment-worker containers to restart"; \
+		fi
 
 ##@ Cleanup
 .PHONY: clean-order-api
@@ -58,8 +73,34 @@ clean-payment-worker: ## Stop and remove payment-worker containers and image
 	fi
 	docker rmi payment-worker:latest || true
 
-.PHONY: clean
-clean: clean-order-api clean-payment-worker ## Clean all services (containers and images)
+.PHONY: clean-postgres
+clean-postgres: ## Stop and remove order-api container and image
+	@echo "Stopping and deleting postgres data"
+	docker rm -f postgres || true
+	docker volume rm resilient-payment-processor_pg-data || true
+
+.PHONY: clean-kafka
+clean-kafka: ## Stop and remove order-api container and image
+	@echo "Stopping and deleting kafka data"
+	docker rm -f kafka || true
+	docker volume rm resilient-payment-processor_kafka-data || true
+	docker volume rm resilient-payment-processor_kafka-secrets|| true
+	@echo "Stopping and deleting zookeeper data"
+	docker rm -f zookeeper || true
+	docker volume rm resilient-payment-processor_zookeeper-data || true
+	docker volume rm resilient-payment-processor_zookeeper-secrets || true
+
+.PHONY: clean-redis
+clean-redis: ## Stop and remove order-api container and image
+	@echo "Stopping and deleting redis data"
+	docker rm -f redis || true
+	docker volume rm resilient-payment-processor_redis-data || true
+
+.PHONY: clean-services
+clean-services: clean-order-api clean-payment-worker ## Clean all services (containers, images)
+
+.PHONY: clean-data
+clean-data: clean-order-api clean-payment-worker clean-postgres clean-kafka clean-redis## Clean all services (containers, images, volumes)
 
 ##@ Seed
 .PHONY: seed-usage

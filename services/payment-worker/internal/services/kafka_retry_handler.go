@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bytedance/gopkg/util/logger"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/go-playground/validator/v10"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
+	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
@@ -27,7 +29,7 @@ type KafkaRetryHandler interface {
 type KafkaRetryConfig struct {
 	Context          context.Context
 	Logger           *zap.Logger
-	RetryChannel     chan views.PaymentJob
+	RetryChannel     <-chan views.PaymentJob
 	Config           *configs.Config
 	PaymentProcessor PaymentProcessor
 	DB               *database.DB
@@ -43,12 +45,39 @@ type KafkaRetryConfig struct {
 // NewKafkaRetryHandler initializes a KafkaRetryHandler with the given configuration.
 // It sets up the retry producer, DLQ producer, consumer, and semaphore based on config values.
 func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
+	// Initialize kafka topic configuration
+	topicConfig := kafkautils.KafkaConfig{
+		BootstrapServers: cfg.Config.KafkaBrokers,
+		Topics: []kafkautils.TopicConfig{
+			{
+				Topic:             cfg.Config.KafkaRetryTopic, // Retry main topic
+				NumPartitions:     int(cfg.Config.KafkaPartition),
+				ReplicationFactor: 1, // Single partition
+				Config: map[string]string{
+					"retention.ms": fmt.Sprintf("%d", cfg.Config.KafkaRetryRetention.Milliseconds()),
+				},
+			},
+			{
+				Topic:             cfg.Config.KafkaRetryDLQTopic, // Retry DLQ topic
+				NumPartitions:     int(cfg.Config.KafkaPartition),
+				ReplicationFactor: 1, // Single partition
+				Config: map[string]string{
+					"retention.ms": fmt.Sprintf("%d", cfg.Config.KafkaRetryDLQRetention.Milliseconds()),
+				},
+			},
+		},
+	}
+	err := kafkautils.InitKafkaTopics(cfg.Logger, cfg.Context, topicConfig)
+	if err != nil {
+		logger.Fatal("failed to initialize kafka topics", zap.Error(err))
+	}
+
 	// initialize kafka retry producer
 	retryProducer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":  cfg.Config.KafkaBrokers, // List of Kafka broker addresses
 		"acks":               "all",                   // Wait for all replicas
 		"enable.idempotence": true,                    // Ensure messages are not sent twice
-		"retries":            cfg.Config.KafkaRetry,   // Built-in retry mechanism
+		"retries":            "1",                     // Built-in retry mechanism
 	})
 	if err != nil {
 		cfg.Logger.Fatal("failedToCreateKafkaProducer", zap.Error(err))
@@ -272,7 +301,7 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 
 	// Successfully processed, commit the offset
 	if _, err := k.retryConsumer.CommitMessage(msg); err != nil {
-		k.Logger.Error("Failed to commit offset", zap.Error(err))
+		k.Logger.Error("Failed to commit offset", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		return
 	}
 	k.Logger.Info("Payment processed successfully",
@@ -339,7 +368,7 @@ func (k *KafkaRetryConfig) checkIfMaxRetryLimitExceeded(job views.PaymentJob, ms
 		}
 		k.sendToRetryDLQ(job, "max retry exceeded", fmt.Sprintf("Max retry count exceeded: %d", k.Config.MaxRetryCount))
 		if _, commitErr := k.retryConsumer.CommitMessage(msg); commitErr != nil {
-			k.Logger.Error("Failed to commit after max retry DLQ", zap.Error(commitErr))
+			k.Logger.Error("Failed to commit after max retry DLQ", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(commitErr))
 		}
 		return errors.New("max retry count exceeded")
 	}

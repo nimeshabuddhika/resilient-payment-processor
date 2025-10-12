@@ -3,7 +3,8 @@
 
 PORT: "8090"
 AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
-KAFKA_TOPIC: "orders-placed"
+KAFKA_ORDER_TOPIC: "orders-placed"
+KAFKA_ORDER_RETENTION: "24h"
 KAFKA_BROKERS: "localhost:9092"
 PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
 REPLICA_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only

@@ -44,10 +44,9 @@ func NewApp(ctx context.Context, logger *zap.Logger) (*http.Server, func(), erro
 		disconnect()
 		return nil, nil, err
 	}
-
 	// Setup dependencies
 	baseHandler := handlers.NewBaseHandler(logger)
-	publisher := services.NewKafkaPublisher(logger, cfg)
+	publisher := services.NewKafkaPublisher(logger, ctx, cfg)
 
 	orderRepo := repositories.NewOrderRepository()
 	accountRepo := repositories.NewAccountRepository()
