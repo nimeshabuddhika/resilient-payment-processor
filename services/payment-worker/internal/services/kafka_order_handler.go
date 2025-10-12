@@ -10,8 +10,8 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/go-playground/validator/v10"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"go.uber.org/zap"
 )
@@ -142,7 +142,7 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 	}
 
 	// Decode the incoming message into a PaymentJob struct
-	var job views.PaymentJob
+	var job dtos.PaymentJob
 	if err := json.Unmarshal(msg.Value, &job); err != nil {
 		k.Logger.Error("Failed to decode Kafka message", zap.Error(err))
 		k.sendToDLQ(job, "json unmarshal error", err.Error())
@@ -182,7 +182,7 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 }
 
 // sendToDLQ sends a failed job to the Dead Letter Queue with context.
-func (k *KafkaOrderConfig) sendToDLQ(job views.PaymentJob, reason, errMsg string) {
+func (k *KafkaOrderConfig) sendToDLQ(job dtos.PaymentJob, reason, errMsg string) {
 	payload := map[string]any{
 		"job":           job,
 		"failureReason": reason,

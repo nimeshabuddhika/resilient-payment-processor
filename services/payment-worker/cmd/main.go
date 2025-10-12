@@ -10,9 +10,9 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/cache"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/internal/services"
 	"go.uber.org/zap"
@@ -64,7 +64,7 @@ func main() {
 	}
 
 	// Initialize retry channel for failed payment jobs
-	retryChannel := make(chan views.PaymentJob)
+	retryChannel := make(chan dtos.PaymentJob)
 	// Initialize repositories for data access
 	orderRepo := repositories.NewOrderRepository()
 	// Configure and instantiate the payment processor

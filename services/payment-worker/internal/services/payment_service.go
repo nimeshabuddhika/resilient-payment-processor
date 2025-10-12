@@ -11,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -23,7 +23,7 @@ import (
 // PaymentProcessor defines the interface for processing payment jobs end-to-end for payment-worker service.
 // It encapsulates the business logic for handling payment transactions, including fraud detection, retry handling, and database operations.
 type PaymentProcessor interface {
-	ProcessPayment(ctx context.Context, paymentJob views.PaymentJob) error
+	ProcessPayment(ctx context.Context, paymentJob dtos.PaymentJob) error
 }
 
 // Domain-level constants and shared errors for the payment service.
@@ -56,7 +56,7 @@ type PaymentProcessorConfig struct {
 	RedisClient   *redis.Client
 	FraudDetector FraudDetector
 	EncryptionKey []byte
-	RetryChannel  chan<- views.PaymentJob
+	RetryChannel  chan<- dtos.PaymentJob
 }
 
 // NewPaymentProcessor constructs a PaymentProcessor with the given configuration.
@@ -66,7 +66,7 @@ func NewPaymentProcessor(conf PaymentProcessorConfig) PaymentProcessor {
 
 // ProcessPayment orchestrates the end-to-end payment flow for a single job.
 // It handles decryption, fraud detection, transaction processing, balance updates, and state management.
-func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job views.PaymentJob) error {
+func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.PaymentJob) error {
 	// Acquire lock on account to prevent race conditions
 	lockKey := fmt.Sprintf("lock:account:%s", job.AccountID.String()) // Use UUID as string
 	locked, err := p.RedisClient.SetNX(ctx, lockKey, "locked", 20*time.Second).Result()
@@ -171,7 +171,7 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job views.P
 }
 
 // handleTransactionResult updates the order status and retry flow based on the transaction outcome.
-func (p *PaymentProcessorConfig) handleTransactionResult(ctx context.Context, tx pgx.Tx, job views.PaymentJob, result TransactionResult) error {
+func (p *PaymentProcessorConfig) handleTransactionResult(ctx context.Context, tx pgx.Tx, job dtos.PaymentJob, result TransactionResult) error {
 	if result.Error == nil {
 		return nil
 	}
@@ -187,7 +187,7 @@ func (p *PaymentProcessorConfig) handleTransactionResult(ctx context.Context, tx
 }
 
 // checkAccountBalance verifies if the account has sufficient funds for the transaction.
-func (p *PaymentProcessorConfig) checkAccountBalance(ctx context.Context, tx pgx.Tx, paymentJob views.PaymentJob, transactionAmount float64) (models.Account, float64, error) {
+func (p *PaymentProcessorConfig) checkAccountBalance(ctx context.Context, tx pgx.Tx, paymentJob dtos.PaymentJob, transactionAmount float64) (models.Account, float64, error) {
 	var account models.Account
 	var balance float64
 	var err error
@@ -213,7 +213,7 @@ func (p *PaymentProcessorConfig) checkAccountBalance(ctx context.Context, tx pgx
 }
 
 // handleFraudResult routes the payment for retry or failure based on the fraud analysis report.
-func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job views.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
+func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job dtos.PaymentJob, fraudStatus FraudStatus, tx pgx.Tx) error {
 	if fraudStatus.FraudFlag == FraudFlagClean {
 		return nil
 	}
@@ -239,7 +239,7 @@ func (p *PaymentProcessorConfig) updateOrderStatus(ctx context.Context, tx pgx.T
 }
 
 // processTransaction simulates the actual payment processing and reports the result.
-func (p *PaymentProcessorConfig) processTransaction(ctx context.Context, paymentWG *sync.WaitGroup, resultChan chan TransactionResult, amount float64, paymentJob views.PaymentJob) {
+func (p *PaymentProcessorConfig) processTransaction(ctx context.Context, paymentWG *sync.WaitGroup, resultChan chan TransactionResult, amount float64, paymentJob dtos.PaymentJob) {
 	defer paymentWG.Done()
 
 	// Simulate processing time with context cancellation support

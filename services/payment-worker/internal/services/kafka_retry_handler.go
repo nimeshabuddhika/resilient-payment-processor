@@ -12,10 +12,10 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"go.uber.org/zap"
 )
@@ -31,7 +31,7 @@ type KafkaRetryHandler interface {
 type KafkaRetryConfig struct {
 	Context          context.Context
 	Logger           *zap.Logger
-	RetryChannel     <-chan views.PaymentJob
+	RetryChannel     <-chan dtos.PaymentJob
 	Config           *configs.Config
 	PaymentProcessor PaymentProcessor
 	DB               *database.DB
@@ -245,7 +245,7 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 
 	// ... (decoding, validation, backoff sleep, processing, commit/DLQ)
 	// Decode message
-	var job views.PaymentJob
+	var job dtos.PaymentJob
 	if err := json.Unmarshal(msg.Value, &job); err != nil {
 		k.Logger.Error("Failed to decode message",
 			zap.Error(err))
@@ -311,7 +311,7 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 }
 
 // sendToRetryDLQ publishes the given job to the retry DLQ topic.
-func (k *KafkaRetryConfig) sendToRetryDLQ(job views.PaymentJob, reason, errMsg string) {
+func (k *KafkaRetryConfig) sendToRetryDLQ(job dtos.PaymentJob, reason, errMsg string) {
 	payload := map[string]any{
 		"job":           job,
 		"failureReason": reason,
@@ -346,7 +346,7 @@ func (k *KafkaRetryConfig) sendToRetryDLQ(job views.PaymentJob, reason, errMsg s
 }
 
 // checkIfMaxRetryLimitExceeded checks if the retry count exceeds the max, sends to DLQ if so, and commits.
-func (k *KafkaRetryConfig) checkIfMaxRetryLimitExceeded(job views.PaymentJob, msg *kafka.Message) error {
+func (k *KafkaRetryConfig) checkIfMaxRetryLimitExceeded(job dtos.PaymentJob, msg *kafka.Message) error {
 	tx, err := k.DB.Begin(k.Context)
 	if err != nil {
 		k.Logger.Error("Failed to begin transaction for max retry check",

@@ -6,14 +6,14 @@ import (
 	"fmt"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	"go.uber.org/zap"
 )
 
 type KafkaPublisher interface {
-	PublishOrder(paymentJob views.PaymentJob) error
+	PublishOrder(paymentJob dtos.PaymentJob) error
 	Close()
 }
 
@@ -63,7 +63,7 @@ func NewKafkaPublisher(logger *zap.Logger, ctx context.Context, cnf *configs.Con
 	}
 }
 
-func (k KafkaPublisherImpl) PublishOrder(paymentJob views.PaymentJob) error {
+func (k KafkaPublisherImpl) PublishOrder(paymentJob dtos.PaymentJob) error {
 	// Serialize the order payload to JSON for Kafka transport
 	msgBytes, err := json.Marshal(paymentJob)
 	if err != nil {

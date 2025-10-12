@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
-	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/views"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 )
 
 // Order maps to table `orders`
@@ -22,8 +22,8 @@ type Order struct {
 	UpdatedAt      time.Time
 }
 
-func (o Order) ToPaymentJob() views.PaymentJob {
-	return views.PaymentJob{
+func (o Order) ToPaymentJob() dtos.PaymentJob {
+	return dtos.PaymentJob{
 		ID:             o.ID,
 		UserID:         o.UserID,
 		AccountID:      o.AccountID,
