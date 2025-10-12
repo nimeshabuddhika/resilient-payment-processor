@@ -17,8 +17,6 @@ Aligned with event-driven best practices: decoupling via Kafka for scalability, 
 - **Observability**: Prometheus metrics (job throughput/errors), Grafana dashboards, Loki/Promtail logs.
 - **Security**: AES encryption at rest. (Future: Keycloak for OAuth2/OIDC/RBAC.)
 
-See [Architecture - v1.pdf](docs/Architecture-v1.pdf) for details.
-
 ## Situation, Task, Action, Result (STAR)
 - **Situation**: Needed scalable system for 100k+ concurrent jobs without failures.
 - **Task**: Architect event-driven microservices with production features.
