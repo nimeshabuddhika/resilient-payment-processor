@@ -1,0 +1,208 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8F7BD5764BAA734F"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": false,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "pluginVersion": "12.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{service_name=\"order-api\"} | json | level != \"\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "order-api",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8F7BD5764BAA734F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 25,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "hidden",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by(minutes)  (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | caller =~ \"^services/kafka_order_handler.*\" | msg = `Payment processed successfully`[1m]) )",
+          "legendFormat": "msg",
+          "queryType": "range",
+          "refId": "A",
+          "step": ""
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by(minutes)  (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | caller =~ \"^services/kafka_retry_handler.*\" | msg = `Payment processed successfully`[5m]) )",
+          "hide": true,
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "payment-worker ",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 42,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "baseFilters": [],
+        "datasource": {
+          "type": "loki",
+          "uid": "P8F7BD5764BAA734F"
+        },
+        "filters": [],
+        "name": "Filters",
+        "type": "adhoc"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Payment worker",
+  "uid": "addgs4b",
+  "version": 5
+}

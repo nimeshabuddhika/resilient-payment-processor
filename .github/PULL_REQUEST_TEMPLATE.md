@@ -15,12 +15,14 @@ Please delete options that are not relevant.
 
 ## How Has This Been Tested?
 
-Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce. List any relevant details for your test configuration.
+Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce. List any
+relevant details for your test configuration.
 
 - [ ] Test A
 - [ ] Test B
 
 **Test Configuration**:
+
 - Go Version:
 - Kubernetes Version:
 

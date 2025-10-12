@@ -1,0 +1,21 @@
+# Configuration for Payment Worker
+# For local development only
+AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
+KAFKA_BROKERS: "localhost:9092" # For local development only
+KAFKA_ORDER_TOPIC: "orders-placed"
+KAFKA_DLQ_TOPIC: "orders-placed-dlq"
+KAFKA_DLQ_RETENTION: "48h"
+KAFKA_CONSUMER_GROUP: "payment-workers" # For local development only
+KAFKA_RETRY_TOPIC: "orders-retry"
+KAFKA_RETRY_DLQ_TOPIC: "orders-retry-dlq"
+KAFKA_RETRY_RETENTION: "24h"
+KAFKA_RETRY_DLQ_RETENTION: "72h"
+RETRY_BASE_BACKOFF: "30s"
+MAX_RETRY_BACKOFF: "5m"
+PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
+MAX_DB_CONNECTIONS: "20"
+MIN_DB_CONNECTIONS: "5"
+REDIS_ADDR: "localhost:6379"
+MAX_RETRY_COUNT: "3"
+MAX_ORDERS_PLACED_CONCURRENT_JOBS: "20"
+MAX_ORDERS_RETRY_CONCURRENT_JOBS: "5"
