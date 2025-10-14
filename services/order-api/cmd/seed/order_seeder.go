@@ -211,7 +211,7 @@ func (c *SeedOrderConfig) postRequest(userId uuid.UUID, request SeedOrder) {
 	// Add headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(pkg.HeaderRequestId, uuid.New().String())
-	req.Header.Set(pkg.UserId, userId.String())
+	req.Header.Set(pkg.HeaderUserId, userId.String())
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -33,3 +33,38 @@ func (o Order) ToPaymentJob() dtos.PaymentJob {
 		UpdatedAt:      o.UpdatedAt,
 	}
 }
+
+// OrderAIModel maps to table orders_ai_dataset
+type OrderAIModel struct {
+	ID                  uuid.UUID
+	UserID              uuid.UUID
+	AccountID           uuid.UUID
+	IdempotencyKey      uuid.UUID
+	Amount              string
+	Currency            string
+	Message             string
+	IsFraud             bool    // Fraud status
+	TransactionVelocity int     // Orders per hour for user (simulated)
+	IpAddress           string  // Simulated IPv4/IPv6 for geo-anomalies
+	AmountDeviation     float64 // Deviation from user's avg order amount
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+func (o OrderAIModel) ToOrderAIDto() dtos.OrderAIDto {
+	return dtos.OrderAIDto{
+		ID:                  o.ID.String(),
+		UserID:              o.UserID.String(),
+		AccountID:           o.AccountID.String(),
+		IdempotencyKey:      o.IdempotencyKey.String(),
+		Amount:              o.Amount,
+		Currency:            o.Currency,
+		Message:             o.Message,
+		IsFraud:             o.IsFraud,
+		TransactionVelocity: o.TransactionVelocity,
+		IpAddress:           o.IpAddress,
+		AmountDeviation:     o.AmountDeviation,
+		CreatedAt:           o.CreatedAt,
+		UpdatedAt:           o.UpdatedAt,
+	}
+}

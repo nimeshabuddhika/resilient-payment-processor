@@ -60,11 +60,12 @@ create table orders_ai_dataset
     user_id         uuid                                                          not null,
     account_id      uuid                                                          not null,
     idempotency_key uuid                                                          not null,
-    amount          text                     default ''::text                     not null,
+    amount          varchar(20)              default '0.00'::character varying    not null,  -- Naked amount as string
     currency        varchar(3)               default 'CAD'::character varying     not null,
-    status          varchar(50)              default 'pending'::character varying not null,
     is_fraud        boolean                  default false,
-    message         varchar(200)             default ''::character varying,
+    transaction_velocity integer                  default 0                            not null,  -- Orders per hour for user (simulated)
+    ip_address          varchar(45)              default ''::character varying        not null,  -- Simulated IPv4/IPv6 for geo-anomalies
+    amount_deviation    numeric(10,2)            default 0.00                         not null,  -- Deviation from user's avg order amount
     created_at      timestamp with time zone default CURRENT_TIMESTAMP,
     updated_at      timestamp with time zone default CURRENT_TIMESTAMP,
     constraint orders_ai_dataset_accounts_id_user_id_fk

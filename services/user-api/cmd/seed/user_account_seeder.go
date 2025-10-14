@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
@@ -27,6 +32,7 @@ func main() {
 	minAccountBalance := flag.Float64("minBalance", 700.0, "Min account balance")
 	maxAccountBalance := flag.Float64("maxBalance", 1000.0, "Max account balance")
 	fraudRate := flag.Float64("fraudRate", 0.01, "Fraud order rate for AI training")
+	exportData := flag.Bool("exportData", true, "Export AI dataset to JSON after seeding")
 
 	flag.Parse()
 
@@ -66,11 +72,9 @@ func main() {
 		logger.Fatal("failed_to_run_database_migrations", zap.Error(err))
 	}
 
-	// Initialize user repository
+	// Initialize repositories
 	userRepo := repositories.NewUserRepository()
-	// Initialize account repository
 	accountRepo := repositories.NewAccountRepository()
-	// Initialize order repository
 	orderRepo := repositories.NewOrderRepository()
 
 	minBal := *minAccountBalance
@@ -79,6 +83,14 @@ func main() {
 		// swap to be safe
 		minBal, maxBal = maxBal, minBal
 	}
+
+	// Track user history for feature generation (simulated during seeding)
+	type userHistory struct {
+		orderCount  int
+		totalAmount float64
+		avgAmount   float64
+	}
+	userHistories := make(map[uuid.UUID]*userHistory)
 
 	// Seed data within a transaction to ensure atomicity.
 	err = db.WithTransaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
@@ -97,9 +109,12 @@ func main() {
 				return err
 			}
 
+			// Initialize user history
+			userHistories[userID] = &userHistory{}
+
 			// Create maxAccountsPerUser accounts
 			noOfAccounts := rand.Intn(*maxAccountsPerUser) + 1
-			for i := 1; i <= noOfAccounts; i++ {
+			for j := 1; j <= noOfAccounts; j++ {
 				// Create accounts with a random balance
 				bal := *minAccountBalance + rand.Float64()*(*maxAccountBalance-*minAccountBalance)
 				balEnc, err := utils.EncryptAES(utils.Float64ToByte(bal), key)
@@ -128,26 +143,45 @@ func main() {
 					if isFraud {
 						amt = 1000.0 + rand.Float64()*4000.0 // Anomaly.
 					}
+
+					// Generate features
+					hist := userHistories[userID]
+					hist.orderCount++
+					velocity := 1 + rand.Intn(5) // Simulated orders/hour (1-5 normal)
+					if isFraud {
+						velocity += rand.Intn(6) // Bias higher (up to 10) for fraud
+					}
+					ip := simulateIP()
+					deviation := 0.0
+					if hist.orderCount > 1 {
+						deviation = math.Abs(amt-hist.avgAmount) / hist.avgAmount
+					}
+
+					// Removed overriding bias to avoid label inconsistency
+
 					logger.Info("creating_order", zap.Any("user_id", userID), zap.Any("account_id", accID), zap.Float64("amt", amt), zap.Bool("is_fraud", isFraud))
 
-					//encrypt amount
-					amtEnc, err := utils.EncryptAES(utils.Float64ToByte(amt), key)
+					// Assume models.Order extended with: TransactionVelocity int, IpAddress string, AmountDeviation float64
+					_, err = orderRepo.CreateAiDataset(ctx, tx, models.OrderAIModel{
+						UserID:              userID,
+						AccountID:           accID,
+						IdempotencyKey:      uuid.New(),
+						Amount:              fmt.Sprintf("%.2f", amt),
+						Currency:            "CAD",
+						CreatedAt:           time.Now(),
+						UpdatedAt:           time.Now(),
+						IsFraud:             isFraud,
+						TransactionVelocity: velocity,
+						IpAddress:           ip,
+						AmountDeviation:     deviation,
+					})
 					if err != nil {
 						return err
 					}
-					_, err = orderRepo.CreateAiDataset(ctx, tx, models.Order{
-						UserID:         userID,
-						AccountID:      accID,
-						IdempotencyKey: uuid.New(),
-						Amount:         amtEnc,
-						Currency:       "CAD",
-						Status:         pkg.OrderStatusPending,
-						CreatedAt:      time.Now(),
-						UpdatedAt:      time.Now(),
-					}, isFraud)
-					if err != nil {
-						return err
-					}
+
+					// Update history after features (consistent with calc)
+					hist.totalAmount += amt
+					hist.avgAmount = hist.totalAmount / float64(hist.orderCount)
 				}
 			}
 		}
@@ -158,4 +192,52 @@ func main() {
 		logger.Fatal("failed_to_seed_data", zap.Error(err))
 	}
 	logger.Info("data_seeded_successfully")
+
+	// Optional export
+	if *exportData {
+		orderPageNumber := 1 // Start from page 1
+		orderPageSize := 100 // Larger page size for efficiency
+		orderResult := make([]dtos.OrderAIDto, 0)
+		for {
+			// Assume orderRepo.GetAllAiDataset(ctx, db) returns []models.AiOrder or similar
+			orders, err := orderRepo.GetAllAiDataset(ctx, db, orderPageNumber, orderPageSize) // Implement this in repo
+			if err != nil {
+				logger.Fatal("failed_to_export_dataset", zap.Error(err))
+			}
+			// Break if there is no data
+			if len(orders) == 0 {
+				break
+			}
+
+			for _, order := range orders {
+				orderResult = append(orderResult, order.ToOrderAIDto())
+			}
+			orderPageNumber++
+		}
+
+		jsonData, err := json.Marshal(orderResult)
+		if err != nil {
+			logger.Fatal("failed_to_marshal_dataset", zap.Error(err))
+		}
+		// create ai folder if not exist
+		path := filepath.Join(".", "ai")
+		err = os.MkdirAll(path, os.ModePerm)
+		if err != nil {
+			logger.Fatal("failed_to_create_dir", zap.Error(err), zap.String("directory", path))
+		}
+		// Write order data
+		path = filepath.Join(path, "ai_dataset.json")
+		err = os.WriteFile(path, jsonData, 0644)
+		if err != nil {
+			logger.Fatal("failed_to_write_json", zap.Error(err))
+		}
+		logger.Info("dataset_exported_successfully", zap.String("file", path), zap.Int("data_count", len(orderResult)))
+	}
+}
+
+// Helper function for simulation
+func simulateIP() string {
+	regions := []string{"192.168.", "10.0.", "172.16.", "8.8.", "209.85."} // Simulate local/public/NA/EU-like
+	prefix := regions[rand.Intn(len(regions))]
+	return fmt.Sprintf("%s%d.%d", prefix, rand.Intn(256), rand.Intn(256))
 }
