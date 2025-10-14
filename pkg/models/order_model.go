@@ -40,12 +40,10 @@ type OrderAIModel struct {
 	UserID              uuid.UUID
 	AccountID           uuid.UUID
 	IdempotencyKey      uuid.UUID
-	Amount              string
+	Amount              float64
 	Currency            string
-	Message             string
 	IsFraud             bool    // Fraud status
 	TransactionVelocity int     // Orders per hour for user (simulated)
-	IpAddress           string  // Simulated IPv4/IPv6 for geo-anomalies
 	AmountDeviation     float64 // Deviation from user's avg order amount
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
@@ -59,10 +57,8 @@ func (o OrderAIModel) ToOrderAIDto() dtos.OrderAIDto {
 		IdempotencyKey:      o.IdempotencyKey.String(),
 		Amount:              o.Amount,
 		Currency:            o.Currency,
-		Message:             o.Message,
 		IsFraud:             o.IsFraud,
 		TransactionVelocity: o.TransactionVelocity,
-		IpAddress:           o.IpAddress,
 		AmountDeviation:     o.AmountDeviation,
 		CreatedAt:           o.CreatedAt,
 		UpdatedAt:           o.UpdatedAt,

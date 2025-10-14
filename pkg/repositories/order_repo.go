@@ -67,15 +67,14 @@ func (o OrderRepositoryImpl) UpdateStatusIdempotencyID(ctx context.Context, tx p
 
 func (o OrderRepositoryImpl) CreateAiDataset(ctx context.Context, tx pgx.Tx, order models.OrderAIModel) (pgconn.CommandTag, error) {
 	return tx.Exec(ctx, `
-						INSERT INTO orders_ai_dataset (user_id, account_id, idempotency_key, amount, is_fraud, transaction_velocity,ip_address, amount_deviation , created_at, updated_at)
-						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING`,
+						INSERT INTO orders_ai_dataset (user_id, account_id, idempotency_key, amount, is_fraud, transaction_velocity, amount_deviation , created_at, updated_at)
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
 		order.UserID,
 		order.AccountID,
 		order.IdempotencyKey,
 		order.Amount,
 		order.IsFraud,
 		order.TransactionVelocity,
-		order.IpAddress,
 		order.AmountDeviation,
 		order.CreatedAt,
 		order.UpdatedAt,
@@ -85,7 +84,7 @@ func (o OrderRepositoryImpl) CreateAiDataset(ctx context.Context, tx pgx.Tx, ord
 func (o OrderRepositoryImpl) GetAllAiDataset(ctx context.Context, db *database.DB, pageNumber int, size int) ([]models.OrderAIModel, error) {
 	//calculate offset.
 	offset := (pageNumber - 1) * size
-	rows, err := db.Query(ctx, `SELECT id, user_id, account_id, idempotency_key, amount, is_fraud, transaction_velocity,ip_address,amount_deviation  , created_at, updated_at 
+	rows, err := db.Query(ctx, `SELECT id, user_id, account_id, idempotency_key, amount, currency, is_fraud, transaction_velocity,amount_deviation  , created_at, updated_at 
 		FROM svc_schema.orders_ai_dataset
 		LIMIT $1 OFFSET $2`, size, offset)
 	if err != nil {
@@ -101,9 +100,9 @@ func (o OrderRepositoryImpl) GetAllAiDataset(ctx context.Context, db *database.D
 			&order.AccountID,
 			&order.IdempotencyKey,
 			&order.Amount,
+			&order.Currency,
 			&order.IsFraud,
 			&order.TransactionVelocity,
-			&order.IpAddress,
 			&order.AmountDeviation,
 			&order.CreatedAt,
 			&order.UpdatedAt,

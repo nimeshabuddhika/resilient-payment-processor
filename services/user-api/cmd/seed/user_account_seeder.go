@@ -151,7 +151,6 @@ func main() {
 					if isFraud {
 						velocity += rand.Intn(6) // Bias higher (up to 10) for fraud
 					}
-					ip := simulateIP()
 					deviation := 0.0
 					if hist.orderCount > 1 {
 						deviation = math.Abs(amt-hist.avgAmount) / hist.avgAmount
@@ -166,13 +165,12 @@ func main() {
 						UserID:              userID,
 						AccountID:           accID,
 						IdempotencyKey:      uuid.New(),
-						Amount:              fmt.Sprintf("%.2f", amt),
+						Amount:              roundFloatToTwo(amt),
 						Currency:            "CAD",
 						CreatedAt:           time.Now(),
 						UpdatedAt:           time.Now(),
 						IsFraud:             isFraud,
 						TransactionVelocity: velocity,
-						IpAddress:           ip,
 						AmountDeviation:     deviation,
 					})
 					if err != nil {
@@ -197,7 +195,7 @@ func main() {
 	if *exportData {
 		orderPageNumber := 1 // Start from page 1
 		orderPageSize := 100 // Larger page size for efficiency
-		orderResult := make([]dtos.OrderAIDto, 0)
+		orderList := make([]dtos.OrderAIDto, 0)
 		for {
 			// Assume orderRepo.GetAllAiDataset(ctx, db) returns []models.AiOrder or similar
 			orders, err := orderRepo.GetAllAiDataset(ctx, db, orderPageNumber, orderPageSize) // Implement this in repo
@@ -210,11 +208,16 @@ func main() {
 			}
 
 			for _, order := range orders {
-				orderResult = append(orderResult, order.ToOrderAIDto())
+				orderList = append(orderList, order.ToOrderAIDto())
 			}
 			orderPageNumber++
 		}
 
+		orderResult := dtos.OrderResult{
+			Orders:    orderList,
+			Count:     len(orderList),
+			CreatedAt: time.Now(),
+		}
 		jsonData, err := json.Marshal(orderResult)
 		if err != nil {
 			logger.Fatal("failed_to_marshal_dataset", zap.Error(err))
@@ -231,13 +234,10 @@ func main() {
 		if err != nil {
 			logger.Fatal("failed_to_write_json", zap.Error(err))
 		}
-		logger.Info("dataset_exported_successfully", zap.String("file", path), zap.Int("data_count", len(orderResult)))
+		logger.Info("dataset_exported_successfully", zap.String("file", path), zap.Int("data_count", len(orderList)))
 	}
 }
 
-// Helper function for simulation
-func simulateIP() string {
-	regions := []string{"192.168.", "10.0.", "172.16.", "8.8.", "209.85."} // Simulate local/public/NA/EU-like
-	prefix := regions[rand.Intn(len(regions))]
-	return fmt.Sprintf("%s%d.%d", prefix, rand.Intn(256), rand.Intn(256))
+func roundFloatToTwo(val float64) float64 {
+	return math.Round(val*100) / 100
 }
