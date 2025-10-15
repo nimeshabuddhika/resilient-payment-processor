@@ -42,7 +42,7 @@ func main() {
 	noOfOrdersPerAccount := flag.Int("noOfOrdersPerAccount", 1, "Number of orders per account to seed")
 	minOrderAmount := flag.Float64("minOrderAmount", 10.0, "Min order amount")
 	maxOrderAmount := flag.Float64("maxOrderAmount", 20.0, "Max order amount")
-	orderApiUrl := flag.String("orderApiUrl", "http://localhost:8081", "Order API URL")
+	orderApiUrl := flag.String("orderApiUrl", "http://localhost:8090", "Order API URL")
 
 	flag.Parse()
 
@@ -75,8 +75,8 @@ func main() {
 	logger.Info("seeding_data")
 
 	// Initialize repositories
-	userRepo := repositories.NewUserRepository()
-	accountRepo := repositories.NewAccountRepository()
+	userRepo := repositories.NewUserRepository(db)
+	accountRepo := repositories.NewAccountRepository(db)
 
 	minOrder := *minOrderAmount
 	maxOrder := *maxOrderAmount
@@ -127,7 +127,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 
 	for {
 		// Get users
-		users, err := c.userRepo.GetUsers(c.db, c.ctx, userPageNumber, userPageSize)
+		users, err := c.userRepo.GetUsers(c.ctx, userPageNumber, userPageSize)
 		if err != nil {
 			c.logger.Fatal("failed_to_get_users", zap.Error(err))
 		}
@@ -145,7 +145,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 			c.logger.Info("processing_user", zap.String("username", user.Username))
 
 			// Fetch user accounts
-			accounts, err := c.accountRepo.GetAccountsByUserID(c.db, c.ctx, user.ID, 1, int(c.noOfAccountPerUser))
+			accounts, err := c.accountRepo.GetAccountsByUserID(c.ctx, user.ID, 1, int(c.noOfAccountPerUser))
 			if err != nil {
 				c.logger.Fatal("failed_to_get_accounts", zap.Error(err))
 			}

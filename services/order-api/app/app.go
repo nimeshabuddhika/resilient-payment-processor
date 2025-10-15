@@ -48,8 +48,8 @@ func NewApp(ctx context.Context, logger *zap.Logger) (*http.Server, func(), erro
 	baseHandler := handlers.NewBaseHandler(logger)
 	publisher := services.NewKafkaPublisher(logger, ctx, cfg)
 
-	orderRepo := repositories.NewOrderRepository()
-	accountRepo := repositories.NewAccountRepository()
+	orderRepo := repositories.NewOrderRepository(db)
+	accountRepo := repositories.NewAccountRepository(db)
 	orderService := services.NewOrderService(logger, cfg, publisher, db, orderRepo, accountRepo)
 	orderHandler := handlers.NewOrderHandler(logger, orderService)
 

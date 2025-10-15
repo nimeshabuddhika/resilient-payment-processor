@@ -16,6 +16,8 @@ create table accounts
             on delete cascade,
     balance    text                     default ''::text                 not null,
     currency   varchar(3)               default 'CAD'::character varying not null,
+    order_count       integer                  default 0                        not null,  -- Total successful orders
+    avg_order_amount  text                     default ''::text                 not null,  -- Encrypted average amount
     created_at timestamp with time zone default CURRENT_TIMESTAMP,
     updated_at timestamp with time zone default CURRENT_TIMESTAMP,
     primary key (id, user_id)

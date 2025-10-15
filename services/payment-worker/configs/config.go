@@ -35,6 +35,7 @@ type Config struct {
 	MaxReplicaRateLimit           int           `mapstructure:"MAX_REPLICA_RATE_LIMIT" validate:"min=1"`
 	MaxOrdersPlacedConcurrentJobs int           `mapstructure:"MAX_ORDERS_PLACED_CONCURRENT_JOBS" validate:"min=1"`
 	MaxOrdersRetryConcurrentJobs  int           `mapstructure:"MAX_ORDERS_RETRY_CONCURRENT_JOBS" validate:"min=1"`
+	FraudMLServiceAddr            string        `mapstructure:"FRAUD_ML_SERVICE_ADDR"`
 }
 
 func Load(logger *zap.Logger) (*Config, error) {

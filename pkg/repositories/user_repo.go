@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
@@ -14,15 +13,16 @@ import (
 type UserRepository interface {
 	// Create creates a new user.
 	Create(ctx context.Context, tx pgx.Tx, user models.User) (pgconn.CommandTag, error)
-	UpdateBalanceByAccountID(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, balance string) error
-	GetUsers(db *database.DB, ctx context.Context, pageNumber int, size int) ([]models.User, error)
+	UpdateBalanceCountAvgByAccountID(ctx context.Context, tx pgx.Tx, account models.Account) (int64, error)
+	GetUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error)
 }
 
 type UserRepositoryImpl struct {
+	db *database.DB
 }
 
-func NewUserRepository() UserRepository {
-	return &UserRepositoryImpl{}
+func NewUserRepository(db *database.DB) UserRepository {
+	return &UserRepositoryImpl{db: db}
 }
 
 func (u UserRepositoryImpl) Create(ctx context.Context, tx pgx.Tx, user models.User) (pgconn.CommandTag, error) {
@@ -36,18 +36,23 @@ func (u UserRepositoryImpl) Create(ctx context.Context, tx pgx.Tx, user models.U
 	)
 }
 
-func (u UserRepositoryImpl) UpdateBalanceByAccountID(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, balance string) error {
-	_, err := tx.Exec(ctx, `UPDATE accounts SET balance = $1, updated_at = NOW() WHERE id = $2`,
-		balance,
-		accountID,
+func (u UserRepositoryImpl) UpdateBalanceCountAvgByAccountID(ctx context.Context, tx pgx.Tx, account models.Account) (int64, error) {
+	commandTag, err := tx.Exec(ctx, `UPDATE accounts SET balance = $1, order_count = $2, avg_order_amount = $3, updated_at = NOW() WHERE id = $4`,
+		account.Balance,
+		account.OrderCount,
+		account.AvgOrderAmount,
+		account.ID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return commandTag.RowsAffected(), nil
 }
 
-func (u UserRepositoryImpl) GetUsers(db *database.DB, ctx context.Context, pageNumber int, size int) ([]models.User, error) {
+func (u UserRepositoryImpl) GetUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error) {
 	//calculate offset.
 	offset := (pageNumber - 1) * size
-	rows, err := db.Query(ctx, `SELECT id, username, created_at, updated_at FROM svc_schema.users LIMIT $1 OFFSET $2`, size, offset)
+	rows, err := u.db.Query(ctx, `SELECT id, username, created_at, updated_at FROM svc_schema.users LIMIT $1 OFFSET $2`, size, offset)
 	if err != nil {
 		return nil, err
 	}

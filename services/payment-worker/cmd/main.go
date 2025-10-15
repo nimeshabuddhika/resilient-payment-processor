@@ -66,19 +66,23 @@ func main() {
 	// Initialize retry channel for failed payment jobs
 	retryChannel := make(chan dtos.PaymentJob)
 	// Initialize repositories for data access
-	orderRepo := repositories.NewOrderRepository()
+	orderRepo := repositories.NewOrderRepository(db)
+	accountRepo := repositories.NewAccountRepository(db)
 	// Configure and instantiate the payment processor
 	paymentProcessor := services.NewPaymentProcessor(services.PaymentProcessorConfig{
 		Logger:      logger,
 		Config:      cfg,
-		AccountRepo: repositories.NewAccountRepository(),
+		AccountRepo: accountRepo,
 		OrderRepo:   orderRepo,
-		UserRepo:    repositories.NewUserRepository(),
+		UserRepo:    repositories.NewUserRepository(db),
 		DB:          db,
 		RedisClient: redisClient,
 		FraudDetector: services.NewFraudDetectionService(services.FraudDetectorConfig{
-			Logger: logger,
-			Cnf:    cfg,
+			Logger:        logger,
+			Cnf:           cfg,
+			AccountRepo:   accountRepo,
+			Redis:         redisClient,
+			EncryptionKey: aesKey,
 		}),
 		EncryptionKey: aesKey,
 		RetryChannel:  retryChannel,

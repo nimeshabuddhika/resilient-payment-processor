@@ -8,12 +8,14 @@ import (
 
 // Account maps to table `accounts`
 type Account struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	Balance   string // Encrypted string.
-	Currency  string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	Balance        string // Encrypted string.
+	Currency       string
+	OrderCount     int
+	AvgOrderAmount string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 
 	// Associations
 	Orders []Order

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"math"
 )
 
 // EncryptAES encrypts the given plaintext using AES-256-GCM.
@@ -73,9 +74,16 @@ func DecodeString(value string) ([]byte, error) {
 
 // DecryptToFloat64 decrypts a string to a float64.
 func DecryptToFloat64(value string, key []byte) (float64, error) {
+	if IsEmpty(value) {
+		return 0, nil
+	}
 	decryptStr, err := DecryptAES(value, key)
 	if err != nil {
 		return 0, err
 	}
 	return ToFloat64(decryptStr)
+}
+
+func ComputeDeviation(amount float64, averageAmount float64) float64 {
+	return math.Abs(amount-averageAmount) / averageAmount
 }

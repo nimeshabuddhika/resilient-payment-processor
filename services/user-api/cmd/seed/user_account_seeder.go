@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	AiDatasetDirPath  = filepath.Join(".", "services", "fraud-ml", "train")
+	AiDatasetDirPath  = filepath.Join(".", "services", "fraud-ml-service", "train")
 	AiDatasetFileName = "ai_dataset.json"
 )
 
@@ -78,9 +78,9 @@ func main() {
 	}
 
 	// Initialize repositories
-	userRepo := repositories.NewUserRepository()
-	accountRepo := repositories.NewAccountRepository()
-	orderRepo := repositories.NewOrderRepository()
+	userRepo := repositories.NewUserRepository(db)
+	accountRepo := repositories.NewAccountRepository(db)
+	orderRepo := repositories.NewOrderRepository(db)
 
 	minBal := *minAccountBalance
 	maxBal := *maxAccountBalance
@@ -203,7 +203,7 @@ func main() {
 		orderList := make([]dtos.OrderAIDto, 0)
 		for {
 			// Assume orderRepo.GetAllAiDataset(ctx, db) returns []models.AiOrder or similar
-			orders, err := orderRepo.GetAllAiDataset(ctx, db, orderPageNumber, orderPageSize) // Implement this in repo
+			orders, err := orderRepo.GetAllAiDataset(ctx, orderPageNumber, orderPageSize) // Implement this in repo
 			if err != nil {
 				logger.Fatal("failed_to_export_dataset", zap.Error(err))
 			}
