@@ -23,6 +23,11 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	AiDatasetDirPath  = filepath.Join(".", "services", "fraud-ml", "data")
+	AiDatasetFileName = "ai_dataset.json"
+)
+
 // main seeds users and their accounts into the database.
 // It initializes logging, loads config, connects to the database, runs migrations,
 // and performs inserts inside a single transaction.
@@ -223,13 +228,13 @@ func main() {
 			logger.Fatal("failed_to_marshal_dataset", zap.Error(err))
 		}
 		// create ai folder if not exist
-		path := filepath.Join(".", "ai")
-		err = os.MkdirAll(path, os.ModePerm)
+
+		err = os.MkdirAll(AiDatasetDirPath, os.ModePerm)
 		if err != nil {
-			logger.Fatal("failed_to_create_dir", zap.Error(err), zap.String("directory", path))
+			logger.Fatal("failed_to_create_dir", zap.Error(err), zap.String("directory", AiDatasetDirPath))
 		}
 		// Write order data
-		path = filepath.Join(path, "ai_dataset.json")
+		path := filepath.Join(AiDatasetDirPath, AiDatasetFileName)
 		err = os.WriteFile(path, jsonData, 0644)
 		if err != nil {
 			logger.Fatal("failed_to_write_json", zap.Error(err))
