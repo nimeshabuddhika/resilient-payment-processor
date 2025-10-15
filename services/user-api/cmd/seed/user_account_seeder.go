@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	AiDatasetDirPath  = filepath.Join(".", "services", "fraud-ml", "data")
+	AiDatasetDirPath  = filepath.Join(".", "services", "fraud-ml", "train")
 	AiDatasetFileName = "ai_dataset.json"
 )
 
