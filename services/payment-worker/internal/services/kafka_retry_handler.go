@@ -389,13 +389,14 @@ func (k *KafkaRetryConfig) checkIfMaxRetryLimitExceeded(job dtos.PaymentJob, msg
 			zap.Int("retry_count", job.RetryCount),
 		)
 
-		if err := k.OrderRepo.UpdateStatusIdempotencyID(
+		affectedRows, err := k.OrderRepo.UpdateStatusByIdempotencyID(
 			k.Context, tx, job.IdempotencyKey, pkg.OrderStatusFailed,
 			fmt.Sprintf("failed transaction after %d retries", job.RetryCount),
-		); err != nil {
+		)
+		if err != nil {
 			k.Logger.Error("failed_to_update_order_status_for_max_retry", zap.Error(err))
 		}
-
+		k.Logger.Info("max_retry_exceeded", zap.Int64("affected_rows", affectedRows))
 		k.sendToRetryDLQ(job, "max retry exceeded", fmt.Sprintf("Max retry count exceeded: %d", k.Config.MaxRetryCount))
 
 		if _, commitErr := k.retryConsumer.CommitMessage(msg); commitErr != nil {

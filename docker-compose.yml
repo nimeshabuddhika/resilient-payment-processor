@@ -95,7 +95,7 @@ services:
     restart: unless-stopped
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 1
     environment:
       GIN_MODE: "release"
       APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
@@ -118,10 +118,29 @@ services:
       APP_MAX_RETRY_COUNT: "3"
       APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "20"
       APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "20"
+      APP_FRAUD_ML_SERVICE_ADDR: "http://fraud-ml-service:8082"
     depends_on:
       - kafka
       - postgres
       - redis
+    labels: {
+      logging: "promtail"
+    }
+  fraud-ml-service:
+    image: fraud-ml-service:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.fraud-ml-service
+    profiles:
+      - services
+    container_name: fraud-ml-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      MODEL_PATH: "/app/train/fraud_model.onnx"
+      FRAUD_THRESHOLD: "0.5"
+      PORT: "8082"
     labels: {
       logging: "promtail"
     }

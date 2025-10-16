@@ -26,18 +26,6 @@ type PaymentProcessor interface {
 	ProcessPayment(ctx context.Context, paymentJob dtos.PaymentJob) error
 }
 
-// Domain-level constants and shared errors for the payment service.
-const (
-	// TransactionProcessingDelay simulates processing time to mimic a real payment rail.
-	TransactionProcessingDelay = 5 * time.Second
-
-	// RandomFailureDivisor simulates a deterministic failure for demonstration/testing.
-	RandomFailureDivisor = 4
-
-	// NetworkFailureModulo simulates a periodic network failure for retry-path validation.
-	NetworkFailureModulo = 7
-)
-
 var (
 	// ErrInsufficientFunds indicates available funds are not enough for the requested debit.
 	ErrInsufficientFunds = errors.New("insufficient funds")
@@ -108,15 +96,6 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 	defer p.RedisClient.Del(ctx, lockKey) // Release after
 	p.Logger.Info("lock_acquired_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
 
-	skip := true
-	if skip {
-		p.Logger.Info("skipping_payment_processing", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
-		time.Sleep(5 * time.Second)
-		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusSuccess, "Payment completed successfully")
-		p.Logger.Info("payment_processing_skipped")
-		return nil
-	}
-
 	// Decrypt transaction amount
 	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.EncryptionKey)
 	if err != nil {
@@ -132,8 +111,9 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 	go p.FraudDetector.Analyze(ctx, &fraudWG, fraudStatusChan, transactionAmount, job)
 
 	// Check account balance
-	_, accountBalance, err := p.checkAccountBalance(ctx, tx, job, transactionAmount)
+	account, accountBalance, err := p.checkAccountBalance(ctx, tx, job, transactionAmount)
 	if err != nil {
+		p.Logger.Error("failed_to_check_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		return err
 	}
 
@@ -146,6 +126,7 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 	fraudStatus := <-fraudStatusChan
 	err = p.handleFraudResult(ctx, job, fraudStatus, tx)
 	if err != nil {
+		p.Logger.Error("failed_to_handle_fraud_result", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		return err
 	}
 	p.Logger.Info("fraud_check_passed_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
@@ -169,23 +150,13 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 	}
 	p.Logger.Info("transaction_processed_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 
-	// Update account balance
-	newBalance := accountBalance - transactionAmount
-	encryptedBalance, err := utils.EncryptAES(utils.Float64ToByte(newBalance), p.EncryptionKey)
-	if err != nil {
-		p.Logger.Error("failed_to_encrypt_new_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
-		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "Encryption of new balance failed")
-		return err
-	}
-	if err = p.UserRepo.UpdateBalanceByAccountID(ctx, tx, job.AccountID, encryptedBalance); err != nil {
+	// Update account balance, avg/count
+	if err = p.UpdateBalanceAvgCount(ctx, tx, job, account, accountBalance, transactionAmount); err != nil {
 		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusFailed, "Balance update failed")
 		return err
 	}
-
 	p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusSuccess, "Payment completed successfully")
-
-	// TODO: Implement Redis lock release logic
 	return nil
 }
 
@@ -210,7 +181,7 @@ func (p *PaymentProcessorConfig) checkAccountBalance(ctx context.Context, tx pgx
 	var account models.Account
 	var balance float64
 	var err error
-	account, err = p.AccountRepo.FindByID(ctx, tx, paymentJob.AccountID)
+	account, err = p.AccountRepo.FindByID(ctx, paymentJob.AccountID)
 	if err != nil {
 		p.Logger.Error("failed_to_find_account", zap.Any(pkg.IdempotencyKey, paymentJob.IdempotencyKey), zap.Error(err))
 		p.updateOrderStatus(ctx, tx, paymentJob.IdempotencyKey, pkg.OrderStatusFailed, "Account not found")
@@ -249,12 +220,13 @@ func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job dtos
 
 // updateOrderStatus updates the order status in the database and logs the outcome.
 func (p *PaymentProcessorConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
-	if err := p.OrderRepo.UpdateStatusIdempotencyID(ctx, tx, idempotencyKey, status, message); err != nil {
+	affectedRows, err := p.OrderRepo.UpdateStatusByIdempotencyID(ctx, tx, idempotencyKey, status, message)
+	if err != nil {
 		p.Logger.Error("failed_to_update_order_status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status))
 		// TODO: Implement order DLQ logic
 		return
 	}
-	p.Logger.Info("order_status_updated_successfully", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Any("order_status", status))
+	p.Logger.Info("order_status_updated_successfully", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Any("order_status", status), zap.Int64("affected_rows", affectedRows))
 }
 
 // processTransaction simulates the actual payment processing and reports the result.
@@ -266,21 +238,47 @@ func (p *PaymentProcessorConfig) processTransaction(ctx context.Context, payment
 	case <-ctx.Done():
 		resultChan <- TransactionResult{EligibleForRetry: true, Error: ctx.Err()}
 		return
-	case <-time.After(TransactionProcessingDelay):
+	default:
 		// Continue with processing
 	}
 
-	// Simulate random failure
-	if int32(paymentJob.IdempotencyKey.ID()%RandomFailureDivisor) == 0 {
-		resultChan <- TransactionResult{EligibleForRetry: false, Error: errors.New("transaction_failed_due_to_simulated_account_issue")}
-		return
-	}
-
-	// Simulate network-related failure
-	if time.Now().Minute()%NetworkFailureModulo == 0 {
-		resultChan <- TransactionResult{EligibleForRetry: true, Error: errors.New("transaction_failed_due_to_simulated_network_issue")}
-		return
-	}
-
 	resultChan <- TransactionResult{EligibleForRetry: false, Error: nil}
+}
+
+// UpdateBalanceAvgCount updates the account balance and avg/count in the database.
+func (p *PaymentProcessorConfig) UpdateBalanceAvgCount(ctx context.Context, tx pgx.Tx, job dtos.PaymentJob, account models.Account, accountBalance float64, transactionAmount float64) error {
+	// Update account balance
+	newBalance := accountBalance - transactionAmount
+	encryptedBalance, err := utils.EncryptAES(utils.Float64ToByte(newBalance), p.EncryptionKey)
+	if err != nil {
+		p.Logger.Error("failed_to_encrypt_new_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		return fmt.Errorf("failed to encrypt new balance: %w", err)
+	}
+	account.Balance = encryptedBalance
+
+	// Update avg and count
+	count := account.OrderCount + 1
+	avgOrderAmount, err := utils.DecryptToFloat64(account.AvgOrderAmount, p.EncryptionKey)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt avg order amount: %w", err)
+	}
+	newAvg := ((avgOrderAmount * float64(account.OrderCount)) + transactionAmount) / float64(count)
+	newAvgEnc, err := utils.EncryptAES(utils.Float64ToByte(newAvg), p.EncryptionKey)
+	if err != nil {
+		p.Logger.Error("failed_to_encrypt_new_avg_order_amount", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		return fmt.Errorf("failed to encrypt new avg order amount: %w", err)
+	}
+	account.OrderCount = count
+	account.AvgOrderAmount = newAvgEnc
+
+	affectedRows, err := p.UserRepo.UpdateBalanceCountAvgByAccountID(ctx, tx, account)
+	if err != nil {
+		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		return err
+	}
+	// Cache
+	cacheKey := fmt.Sprintf(RedisAvgKey, account.ID.String())
+	p.RedisClient.Set(ctx, cacheKey, fmt.Sprintf("%f", newAvg), DeviationCacheTTL)
+	p.Logger.Info("account_balance_updated_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int64("affected_rows", affectedRows))
+	return nil
 }

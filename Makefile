@@ -96,11 +96,17 @@ clean-redis: ## Stop and remove order-api container and image
 	docker rm -f redis || true
 	docker volume rm resilient-payment-processor_redis-data || true
 
+.PHONY: clean-fraud-ml-service
+clean-fraud-ml-service: ## Stop and remove fraud-ml-service container and image
+	@echo "Stopping and deleting fraud-ml-service"
+	docker rm -f fraud-ml-service || true
+	docker rmi fraud-ml-service:latest || true
+
 .PHONY: clean-services
-clean-services: clean-order-api clean-payment-worker ## Clean all services (containers, images)
+clean-services: clean-order-api clean-payment-worker clean-fraud-ml-service## Clean all services (containers, images)
 
 .PHONY: clean-data
-clean-data: clean-order-api clean-payment-worker clean-postgres clean-kafka clean-redis## Clean all services (containers, images, volumes)
+clean-data: clean-services clean-postgres clean-kafka clean-redis## Clean all services (containers, images, volumes)
 
 ##@ Seed
 .PHONY: seed-usage
@@ -117,3 +123,6 @@ seed-users-and-accounts: ## Seed Users and User accounts directly to the databas
 .PHONY: seed-orders
 seed-orders: ## Seed orders via order-api
 	go run $(ORDER_SEED_FILE)
+
+.PHONY: seed
+seed: seed-users-and-accounts seed-orders ## Seed users accounts and orders

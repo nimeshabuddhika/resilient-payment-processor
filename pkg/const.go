@@ -10,6 +10,7 @@ const (
 	TraceId        string = "trace_id"
 	RequestId      string = "request_id"
 	IdempotencyKey string = "idempotency_key"
+	Account_Id     string = "account_id"
 )
 
 type OrderStatus string
