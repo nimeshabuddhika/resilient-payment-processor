@@ -1,0 +1,24 @@
+# Use slim base for maintainabilit
+FROM python:3.12-slim
+
+# Set workdir
+WORKDIR /app
+
+# Install system deps (e.g., for onnxruntime if needed; minimal)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for layer caching
+COPY services/fraud-ml-service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn  # Add Gunicorn for prod serving
+
+# Copy app and model (train subfolder included)
+COPY services/fraud-ml-service/app.py .
+COPY services/fraud-ml-service/train/fraud_model.onnx train/
+
+# Expose port (matches your env; configurable)
+EXPOSE 8082
+
+# Run with Gunicorn for resilience (workers=4)
+CMD ["gunicorn", "--bind", "0.0.0.0:8082", "--workers", "4", "app:app"]

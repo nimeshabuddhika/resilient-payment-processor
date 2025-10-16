@@ -42,7 +42,7 @@ func main() {
 	noOfOrdersPerAccount := flag.Int("noOfOrdersPerAccount", 1, "Number of orders per account to seed")
 	minOrderAmount := flag.Float64("minOrderAmount", 10.0, "Min order amount")
 	maxOrderAmount := flag.Float64("maxOrderAmount", 20.0, "Max order amount")
-	orderApiUrl := flag.String("orderApiUrl", "http://localhost:8090", "Order API URL")
+	orderApiUrl := flag.String("orderApiUrl", "http://localhost:8081", "Order API URL")
 
 	flag.Parse()
 

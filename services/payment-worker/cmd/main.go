@@ -101,7 +101,7 @@ func main() {
 	closeRetryHandler := retryHandler.Start()
 
 	// Set up Kafka order consumer
-	orderHandler := services.NewKafkaOrderConsumer(&services.KafkaOrderConfig{
+	orderHandler := services.NewKafkaOrderConsumer(services.KafkaOrderConfig{
 		Context:          ctx,
 		Logger:           logger,
 		Config:           cfg,

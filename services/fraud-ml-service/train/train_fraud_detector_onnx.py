@@ -49,7 +49,7 @@ def main():
     f1 = f1_score(y_test, y_pred)
     print(f"f1_score: {f1:.4f}")
 
-    # Export ONNX (disable ZipMap for straightforward probability array)
+    # Export ONNX
     initial_type = [("input", FloatTensorType([None, len(FEATURE_ORDER)]))]
     onnx_model = convert_sklearn(
         pipe,

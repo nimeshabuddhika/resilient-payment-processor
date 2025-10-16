@@ -56,14 +56,8 @@ def _validate_and_vectorize(payload: Dict[str, Any]) -> np.ndarray:
     return np.array([vals], dtype=np.float32)
 
 def _extract_probability(outputs) -> float:
-    """
-    We disabled ZipMap in export, so probabilities should be an array shape (N, C).
-    For binary classification, we take column index 1 as P(class=1).
-    Fallbacks included for robustness.
-    """
-    # Typical skl2onnx RF classifier order: [labels, probabilities]
+    # skl2onnx RF classifier order
     labels = None
-    probas = None
 
     if isinstance(outputs, list):
         if len(outputs) == 2:
@@ -77,7 +71,6 @@ def _extract_probability(outputs) -> float:
 
     # If ZipMap slipped through (dict), handle it
     if isinstance(probas, list) and len(probas) > 0 and isinstance(probas[0], dict):
-        # Keys may be 0/1 or '0'/'1'
         return float(probas[0].get(1, probas[0].get("1", 0.0)))
 
     # If ndarray with shape (1,2)

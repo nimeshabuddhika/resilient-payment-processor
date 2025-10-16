@@ -26,18 +26,6 @@ type PaymentProcessor interface {
 	ProcessPayment(ctx context.Context, paymentJob dtos.PaymentJob) error
 }
 
-// Domain-level constants and shared errors for the payment service.
-const (
-	// TransactionProcessingDelay simulates processing time to mimic a real payment rail.
-	TransactionProcessingDelay = 5 * time.Second
-
-	// RandomFailureDivisor simulates a deterministic failure for demonstration/testing.
-	RandomFailureDivisor = 4
-
-	// NetworkFailureModulo simulates a periodic network failure for retry-path validation.
-	NetworkFailureModulo = 7
-)
-
 var (
 	// ErrInsufficientFunds indicates available funds are not enough for the requested debit.
 	ErrInsufficientFunds = errors.New("insufficient funds")
@@ -284,6 +272,13 @@ func (p *PaymentProcessorConfig) UpdateBalanceAvgCount(ctx context.Context, tx p
 	account.AvgOrderAmount = newAvgEnc
 
 	affectedRows, err := p.UserRepo.UpdateBalanceCountAvgByAccountID(ctx, tx, account)
+	if err != nil {
+		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		return err
+	}
+	// Cache
+	cacheKey := fmt.Sprintf(RedisAvgKey, account.ID.String())
+	p.RedisClient.Set(ctx, cacheKey, fmt.Sprintf("%f", newAvg), DeviationCacheTTL)
 	p.Logger.Info("account_balance_updated_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int64("affected_rows", affectedRows))
 	return nil
 }

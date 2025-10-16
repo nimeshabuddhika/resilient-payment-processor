@@ -74,20 +74,22 @@ func (f *FraudDetectorConfig) Analyze(ctx context.Context, wg *sync.WaitGroup, s
 	default:
 		// Continue processing
 	}
+	f.Logger.Info("start_processing", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.String("account_id", job.AccountID.String()))
 
 	// Calculate velocity using redis
-
 	velocity, err := f.computeVelocity(ctx, job.AccountID)
 	if err != nil {
 		f.Logger.Error("velocity_calc_failed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		velocity = 1 // Fallback default
 	}
+	f.Logger.Info("velocity", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int("velocity", velocity))
 
 	// Compute deviation using db query + Redis cache
 	deviation, err := f.computeDeviation(ctx, job.AccountID, amount)
 	if err != nil {
 		f.Logger.Error("deviation_calc_failed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 	}
+	f.Logger.Info("deviation", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Float64("deviation", deviation))
 
 	// Integration with fraud-ml-service
 	result, err := f.AnalyzeTransaction(ctx, job.IdempotencyKey, pw_dtos.PredictRequest{
@@ -148,6 +150,7 @@ func (f *FraudDetectorConfig) computeDeviation(ctx context.Context, accountID uu
 		}
 		return 0, nil
 	} else if err != nil {
+		f.Logger.Error("failed_to_get_avg_amount", zap.Any(pkg.IdempotencyKey, accountID), zap.String("cache_key", cacheKey), zap.Error(err))
 		return 0, err
 	}
 	// Parse string average amount to float64
@@ -163,6 +166,7 @@ func (f *FraudDetectorConfig) computeDeviation(ctx context.Context, accountID uu
 
 // AnalyzeTransaction sends a transaction analysis request to the fraud detection service and returns the response or an error.
 func (f *FraudDetectorConfig) AnalyzeTransaction(ctx context.Context, idempotencyKey uuid.UUID, request pw_dtos.PredictRequest) (pw_dtos.PredictResponse, error) {
+	f.Logger.Info("ml_request", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.String("url", f.fraudMLAddr))
 	b, _ := json.Marshal(request)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.fraudMLAddr, bytes.NewReader(b))
 	if err != nil {
