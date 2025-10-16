@@ -9,6 +9,7 @@ Aligned with event-driven best practices: decoupling via Kafka for scalability, 
 - **Microservices** (Go + Gin for APIs, confluent-kafka-go):
     - `order-api`: CRUD for orders. Validates balance (sync DB query), publishes to Kafka. REST: POST /orders.
     - `payment-worker`: Stateless Kafka consumer. Processes jobs with resilience. Scales horizontally.
+    - `fraud-ml-service`: AI-based fraud detection. Integrates with payment-worker for real-time analysis and smart decisions making.
 - **Event Bus**: Kafka (topics: orders-placed partitioned by userID; retry/DLQ for failures).
 - **Data Stores**:
     - Postgres (pgx driver): Shared DB with encryption (AES-GCM app-level).
@@ -52,7 +53,6 @@ Test end-to-end: Submit order via Swagger; monitor processing in payment-worker 
 - Kubernetes: Helm charts in /charts (apply via Minikube: `helm install rpp ./charts/resilient-payment-processor`). (future expansion).
 
 ## Future Plans
-- **High Priority: AI Integration**: Add fraud detection via Django server (Torch model for anomaly scoring). Run as sidecar/separate service; integrate with payment-worker for real-time analysis.
 - **Security**: Integrate Keycloak for authN/authZ, OAuth2/OIDC, RBAC, certificate management.
 - **Optimization**: Tune concurrent processing (semaphores to autoscaling), high-availability DB (read replicas, failover).
 - **Testing/Deployment**: Expand JMeter for 10k+ loads; Minikube with HPA autoscaling; CI/CD via GitHub Actions (build/test/deploy).
