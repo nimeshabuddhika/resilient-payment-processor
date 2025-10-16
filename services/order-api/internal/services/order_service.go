@@ -60,7 +60,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 
 	err := s.db.WithTransaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		// Check idempotency (query existing)
-		exists, err := s.orderRepo.FindByIdempotencyKey(ctx, tx, req.IdempotencyID)
+		exists, err := s.orderRepo.FindByIdempotencyKey(ctx, req.IdempotencyID)
 		if err != nil {
 			return pkg.HandleSQLError(traceId, s.logger, err)
 		}
@@ -71,7 +71,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, traceId string, user
 			return pkg.NewAppError(pkg.ErrIdempotencyConflictCode, "idempotency_key_already_exists", nil)
 		}
 		// Get account
-		account, err := s.accountRepo.FindByID(ctx, tx, req.AccountID)
+		account, err := s.accountRepo.FindByID(ctx, req.AccountID)
 		if err != nil {
 			return pkg.HandleSQLError(traceId, s.logger, err)
 		}

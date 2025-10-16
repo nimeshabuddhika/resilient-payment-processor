@@ -75,8 +75,8 @@ func main() {
 	logger.Info("seeding_data")
 
 	// Initialize repositories
-	userRepo := repositories.NewUserRepository()
-	accountRepo := repositories.NewAccountRepository()
+	userRepo := repositories.NewUserRepository(db)
+	accountRepo := repositories.NewAccountRepository(db)
 
 	minOrder := *minOrderAmount
 	maxOrder := *maxOrderAmount
@@ -127,7 +127,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 
 	for {
 		// Get users
-		users, err := c.userRepo.GetUsers(c.db, c.ctx, userPageNumber, userPageSize)
+		users, err := c.userRepo.GetUsers(c.ctx, userPageNumber, userPageSize)
 		if err != nil {
 			c.logger.Fatal("failed_to_get_users", zap.Error(err))
 		}
@@ -145,7 +145,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 			c.logger.Info("processing_user", zap.String("username", user.Username))
 
 			// Fetch user accounts
-			accounts, err := c.accountRepo.GetAccountsByUserID(c.db, c.ctx, user.ID, 1, int(c.noOfAccountPerUser))
+			accounts, err := c.accountRepo.GetAccountsByUserID(c.ctx, user.ID, 1, int(c.noOfAccountPerUser))
 			if err != nil {
 				c.logger.Fatal("failed_to_get_accounts", zap.Error(err))
 			}
@@ -211,7 +211,7 @@ func (c *SeedOrderConfig) postRequest(userId uuid.UUID, request SeedOrder) {
 	// Add headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(pkg.HeaderRequestId, uuid.New().String())
-	req.Header.Set(pkg.UserId, userId.String())
+	req.Header.Set(pkg.HeaderUserId, userId.String())
 
 	resp, err := client.Do(req)
 	if err != nil {
