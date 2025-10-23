@@ -42,19 +42,110 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     depends_on:
       - kafka
-
-  postgres:
+  # ---- Postgres primary + replicas + haproxy + PgBouncer ----
+  # ---------- PRIMARY ----------
+  postgres-primary:
     image: postgres:17.5
-    container_name: postgres
+    container_name: postgres-primary
     restart: unless-stopped
     environment:
-      POSTGRES_USER: db_user # For local development only
-      POSTGRES_PASSWORD: db_password # For local development only
+      POSTGRES_USER: db_user
+      POSTGRES_PASSWORD: db_password
+      # Enforce scram on remote auth; keep local socket trust during init
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
     ports:
       - "5432:5432"
     volumes:
-      - pg-data:/var/lib/postgresql/data
-      - ./configs/postgres/1_db_init.sh:/docker-entrypoint-initdb.d/1_db_init.sh:ro # Create `resilient_payment_processor` database and `service_schema` schema
+      - pg-primary:/var/lib/postgresql/data
+      - ./configs/postgres/primary/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U db_user -d resilient_payment_processor" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- REPLICAS ----------
+  postgres-replica-1:
+    image: postgres:17.5
+    container_name: postgres-replica-1
+    restart: unless-stopped
+    depends_on: [postgres-primary]
+    environment:
+      REPL_USER: repl_user
+      REPL_PASSWORD: repl_password
+      PRIMARY_HOST: postgres-primary
+      PRIMARY_PORT: "5432"
+      REPL_SLOT: slot_replica_1
+    volumes:
+      - pg-replica-1:/var/lib/postgresql/data
+      - ./configs/postgres/replica/entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+    entrypoint: ["bash", "/usr/local/bin/replica-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U db_user -h localhost -d resilient_payment_processor"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres-replica-2:
+    image: postgres:17.5
+    container_name: postgres-replica-2
+    restart: unless-stopped
+    depends_on: [postgres-primary]
+    environment:
+      REPL_USER: repl_user
+      REPL_PASSWORD: repl_password
+      PRIMARY_HOST: postgres-primary
+      PRIMARY_PORT: "5432"
+      REPL_SLOT: slot_replica_2
+    volumes:
+      - pg-replica-2:/var/lib/postgresql/data
+      - ./configs/postgres/replica/entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+    entrypoint: ["bash", "/usr/local/bin/replica-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U db_user -h localhost -d resilient_payment_processor"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  # ---------- READ LB (replicas only) ----------
+  haproxy-read:
+    image: haproxy:3.2
+    container_name: haproxy-read
+    restart: unless-stopped
+    depends_on:
+      - postgres-replica-1
+      - postgres-replica-2
+    volumes:
+      - ./configs/postgres/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5440:5432" # host:5440 -> HAProxy -> replicas
+  # ---------- POOLERS ----------
+  # Writes -> Primary
+  pgbouncer-write:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    container_name: pgbouncer-write
+    restart: unless-stopped
+    depends_on:
+      - postgres-primary
+    ports:
+      - "6432:6432"  # host 6432 -> PgBouncer
+    volumes:
+      - ./configs/postgres/pgbouncer/pgbouncer-write.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./configs/postgres/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    command: [ "pgbouncer", "/etc/pgbouncer/pgbouncer.ini" ]
+
+  # Reads -> HAProxy (replica LB)
+  pgbouncer-read:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    container_name: pgbouncer-read
+    restart: unless-stopped
+    depends_on:
+      - haproxy-read
+    ports:
+      - "6433:6432"  # host 6433 -> PgBouncer
+    volumes:
+      - ./configs/postgres/pgbouncer/pgbouncer-read.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./configs/postgres/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    command: ["pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
 
   order-api:
     image: order-api:latest
@@ -74,13 +165,14 @@ services:
       APP_KAFKA_BROKERS: "kafka:29092" # For local development only
       APP_KAFKA_ORDER_TOPIC: "orders-placed"
       APP_KAFKA_ORDER_RETENTION: "24h"
-      APP_PRIMARY_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
-      APP_REPLICA_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
-      APP_MAX_DB_CONNECTIONS: "20"
+      APP_PRIMARY_DB_ADDR: "db_user:db_password@pgbouncer-write:6432/resilient_payment_processor?sslmode=disable" # For local development only
+      APP_READ_DB_ADDR: "db_user:db_password@pgbouncer-read:6432/resilient_payment_processor?sslmode=disable" # For local development only
+      APP_MAX_DB_CONNECTIONS: "50"
       APP_MIN_DB_CONNECTIONS: "5"
     depends_on:
       - kafka
-      - postgres
+      - pgbouncer-write
+      - pgbouncer-read
     labels: {
       logging: "promtail"
     }
@@ -109,9 +201,10 @@ services:
       APP_KAFKA_RETRY_DLQ_RETENTION: "168h"
       APP_KAFKA_ORDER_CONSUMER_GROUP: "payment-order-workers"
       APP_KAFKA_RETRY_CONSUMER_GROUP: "payment-retry-workers"
-      APP_PRIMARY_DB_ADDR: "db_user:db_password@postgres:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
-      APP_MAX_DB_CONNECTIONS: "5"
-      APP_MIN_DB_CONNECTIONS: "1"
+      APP_PRIMARY_DB_ADDR: "db_user:db_password@pgbouncer-write:6432/resilient_payment_processor?sslmode=disable" # For local development only
+      APP_READ_DB_ADDR: "db_user:db_password@pgbouncer-read:6432/resilient_payment_processor?sslmode=disable" # For local development only
+      APP_MAX_DB_CONNECTIONS: "50"
+      APP_MIN_DB_CONNECTIONS: "5"
       APP_REDIS_ADDR: "redis:6379"
       APP_RETRY_BASE_BACKOFF: "30s"
       APP_MAX_RETRY_BACKOFF: "5m"
@@ -121,7 +214,8 @@ services:
       APP_FRAUD_ML_SERVICE_ADDR: "http://fraud-ml-service:8082"
     depends_on:
       - kafka
-      - postgres
+      - pgbouncer-write
+      - pgbouncer-read
       - redis
     labels: {
       logging: "promtail"
@@ -166,7 +260,6 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana  # Persistence
       - ./configs/grafana/provisioning:/etc/grafana/provisioning  # data sources
-      - ./configs/grafana/dashboards:/etc/grafana/dashboards  # dashboards
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin  # For local development only
     depends_on:
@@ -204,7 +297,9 @@ services:
       - loki
 
 volumes:
-  pg-data:
+  pg-primary:
+  pg-replica-1:
+  pg-replica-2:
   prometheus-data:
   grafana-data:
   kafka-data:

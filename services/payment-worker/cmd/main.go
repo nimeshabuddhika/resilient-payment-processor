@@ -33,10 +33,10 @@ func main() {
 
 	// Initialize PostgreSQL database connection
 	dbConfig := database.Config{
-		PrimaryDSN:  cfg.PrimaryDbAddr,
-		ReplicaDSNs: []string{cfg.ReplicaDbAddr},
-		MaxConns:    cfg.MaxDbCons,
-		MinConns:    cfg.MinDbCons,
+		PrimaryDSN: cfg.PrimaryDbAddr,
+		ReadDSNs:   []string{cfg.ReadDbAddr},
+		MaxConns:   cfg.MaxDbCons,
+		MinConns:   cfg.MinDbCons,
 	}
 	db, disconnect, err := database.New(context.Background(), logger, dbConfig)
 	if err != nil {

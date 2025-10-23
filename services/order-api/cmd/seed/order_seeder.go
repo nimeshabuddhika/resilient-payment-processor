@@ -59,10 +59,10 @@ func main() {
 
 	// Initialize postgres db
 	dbConfig := database.Config{
-		PrimaryDSN:  cfg.PrimaryDbAddr,
-		ReplicaDSNs: []string{cfg.ReplicaDbAddr},
-		MaxConns:    cfg.MaxDbCons,
-		MinConns:    cfg.MinDbCons,
+		PrimaryDSN: cfg.PrimaryDbAddr,
+		ReadDSNs:   []string{cfg.ReadDbAddr},
+		MaxConns:   cfg.MaxDbCons,
+		MinConns:   cfg.MinDbCons,
 	}
 	ctx := context.Background()
 	db, closer, err := database.New(ctx, logger, dbConfig)
@@ -127,7 +127,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 
 	for {
 		// Get users
-		users, err := c.userRepo.GetUsers(c.ctx, userPageNumber, userPageSize)
+		users, err := c.userRepo.FindUsers(c.ctx, userPageNumber, userPageSize)
 		if err != nil {
 			c.logger.Fatal("failed_to_get_users", zap.Error(err))
 		}
@@ -175,6 +175,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 			break
 		}
 		userPageNumber++
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	duration := time.Since(startTime)

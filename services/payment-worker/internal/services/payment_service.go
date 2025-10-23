@@ -37,6 +37,10 @@ var (
 	ErrSuspiciousTransaction = errors.New("suspicious transaction detected")
 )
 
+const (
+	TransactionProcessingDelay = 100 * time.Millisecond
+)
+
 // TransactionResult represents the outcome of a transaction attempt.
 type TransactionResult struct {
 	EligibleForRetry bool
@@ -238,7 +242,7 @@ func (p *PaymentProcessorConfig) processTransaction(ctx context.Context, payment
 	case <-ctx.Done():
 		resultChan <- TransactionResult{EligibleForRetry: true, Error: ctx.Err()}
 		return
-	default:
+	case <-time.After(TransactionProcessingDelay):
 		// Continue with processing
 	}
 
@@ -277,7 +281,7 @@ func (p *PaymentProcessorConfig) UpdateBalanceAvgCount(ctx context.Context, tx p
 		return err
 	}
 	// Cache
-	cacheKey := fmt.Sprintf(RedisAvgKey, account.ID.String())
+	cacheKey := GetDeviationRedisKey(account.ID)
 	p.RedisClient.Set(ctx, cacheKey, fmt.Sprintf("%f", newAvg), DeviationCacheTTL)
 	p.Logger.Info("account_balance_updated_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int64("affected_rows", affectedRows))
 	return nil

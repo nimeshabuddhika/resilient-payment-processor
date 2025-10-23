@@ -14,7 +14,7 @@ type Config struct {
 	Port                string        `mapstructure:"PORT" validate:"required"`
 	KafkaBrokers        string        `mapstructure:"KAFKA_BROKERS" validate:"required"`
 	PrimaryDbAddr       string        `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
-	ReplicaDbAddr       string        `mapstructure:"REPLICA_DB_ADDR"`
+	ReadDbAddr          string        `mapstructure:"READ_DB_ADDR"`
 	MaxDbCons           int32         `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
 	MinDbCons           int32         `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
 	KafkaPartition      uint32        `mapstructure:"KAFKA_PARTITION" validate:"min=1"`

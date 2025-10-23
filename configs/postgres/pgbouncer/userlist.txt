@@ -1,0 +1,2 @@
+"pgbouncer" "pgbouncer_password"
+"db_user"   "db_password"
