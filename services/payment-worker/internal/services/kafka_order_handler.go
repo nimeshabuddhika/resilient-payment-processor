@@ -109,12 +109,12 @@ func (k *KafkaOrderConfig) Start() func() {
 				continue
 			}
 			// Acquire semaphore slot, blocking if limit is reached
-			k.Logger.Info("received_message", zap.Int("semaphore_size", len(k.orderSem)))
+			k.Logger.Debug("received_message", zap.Int("semaphore_size", len(k.orderSem)))
 			k.orderSem <- struct{}{}
 			go func(m *kafka.Message) {
 				defer func() {
 					<-k.orderSem // Release slot after processing
-					k.Logger.Info("released_order_semaphore", zap.Int("semaphore_size", len(k.orderSem)))
+					k.Logger.Debug("released_order_semaphore", zap.Int("semaphore_size", len(k.orderSem)))
 				}()
 				k.processMessage(m)
 			}(msg)

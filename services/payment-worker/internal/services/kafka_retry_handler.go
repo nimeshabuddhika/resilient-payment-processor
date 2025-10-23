@@ -240,7 +240,18 @@ func (k *KafkaRetryConfig) startRetryConsumer() {
 			k.Logger.Error("failed_to_read_retry_message", zap.Error(err))
 			continue
 		}
-		go k.processRetryMessage(msg)
+
+		// acquire semaphore with context
+		select {
+		case k.retrySemaphore <- struct{}{}:
+		case <-k.Context.Done():
+			return
+		}
+
+		go func(m *kafka.Message) {
+			defer func() { <-k.retrySemaphore }()
+			k.processRetryMessage(m)
+		}(msg)
 	}
 }
 
@@ -253,14 +264,6 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 		return
 	default:
 	}
-
-	// acquire semaphore with context
-	select {
-	case k.retrySemaphore <- struct{}{}:
-	case <-k.Context.Done():
-		return
-	}
-	defer func() { <-k.retrySemaphore }()
 
 	// decode
 	var job dtos.PaymentJob

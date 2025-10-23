@@ -91,7 +91,7 @@ seed-help: ## Seed usage seeders
 
 .PHONY: seed-users-and-accounts
 seed-users-and-accounts: ## Seed Users and User accounts directly to the database
-	go run $(USER_SEED_FILE) -noOfUsers 5000
+	go run $(USER_SEED_FILE) -noOfUsers 5000 -exportData false
 
 .PHONY: seed-orders
 seed-orders: ## Seed orders via order-api

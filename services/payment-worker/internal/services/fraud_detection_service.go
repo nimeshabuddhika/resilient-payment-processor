@@ -82,14 +82,14 @@ func (f *FraudDetectorConfig) Analyze(ctx context.Context, wg *sync.WaitGroup, s
 		f.Logger.Error("velocity_calc_failed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		velocity = 1 // Fallback default
 	}
-	f.Logger.Info("velocity", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int("velocity", velocity))
+	f.Logger.Debug("velocity", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int("velocity", velocity))
 
 	// Compute deviation using db query + Redis cache
 	deviation, err := f.computeDeviation(ctx, job.AccountID, amount)
 	if err != nil {
 		f.Logger.Error("deviation_calc_failed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 	}
-	f.Logger.Info("deviation", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Float64("deviation", deviation))
+	f.Logger.Debug("deviation", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Float64("deviation", deviation))
 
 	// Integration with fraud-ml-service
 	result, err := f.AnalyzeTransaction(ctx, job.IdempotencyKey, pw_dtos.PredictRequest{
@@ -166,7 +166,6 @@ func (f *FraudDetectorConfig) computeDeviation(ctx context.Context, accountID uu
 
 // AnalyzeTransaction sends a transaction analysis request to the fraud detection service and returns the response or an error.
 func (f *FraudDetectorConfig) AnalyzeTransaction(ctx context.Context, idempotencyKey uuid.UUID, request pw_dtos.PredictRequest) (pw_dtos.PredictResponse, error) {
-	f.Logger.Info("ml_request", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.String("url", f.fraudMLAddr))
 	b, _ := json.Marshal(request)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.fraudMLAddr, bytes.NewReader(b))
 	if err != nil {
@@ -176,7 +175,7 @@ func (f *FraudDetectorConfig) AnalyzeTransaction(ctx context.Context, idempotenc
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		f.Logger.Info("ml_request_error", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Int("status_code", resp.StatusCode), zap.Error(err))
+		f.Logger.Info("ml_request_error", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err))
 		return pw_dtos.PredictResponse{}, err
 	}
 	defer func() {
@@ -187,13 +186,15 @@ func (f *FraudDetectorConfig) AnalyzeTransaction(ctx context.Context, idempotenc
 	// Check response status
 	if http.StatusOK != resp.StatusCode {
 		f.Logger.Info("ml_request_failed", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Int("status_code", resp.StatusCode), zap.Error(err))
-		return pw_dtos.PredictResponse{}, err
+		return pw_dtos.PredictResponse{}, fmt.Errorf("ml request failed: %d", resp.StatusCode)
 	}
 	//Decode response
 	var result pw_dtos.PredictResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		f.Logger.Error("failed_to_decode_response", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err))
+		return pw_dtos.PredictResponse{}, err
 	}
-	f.Logger.Info("ml_response", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Int("status_code", resp.StatusCode), zap.Error(err))
+	f.Logger.Debug("ml_response", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Int("status_code", resp.StatusCode), zap.Error(err))
 	return result, err
 }
 
