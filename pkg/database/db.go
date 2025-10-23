@@ -16,10 +16,10 @@ import (
 
 // Config holds database connection details.
 type Config struct {
-	PrimaryDSN  string
-	ReplicaDSNs []string // Optional; if empty, use primary for reads. Multiple for balancing.
-	MaxConns    int32
-	MinConns    int32
+	PrimaryDSN string
+	ReadDSNs   []string // Optional; if empty, use primary for reads. Multiple for balancing.
+	MaxConns   int32
+	MinConns   int32
 }
 
 // DB provides read/write routing.
@@ -36,7 +36,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg Config) (*DB, func(), erro
 	}
 
 	readers := make([]*pgxpool.Pool, 0)
-	for _, dsn := range cfg.ReplicaDSNs {
+	for _, dsn := range cfg.ReadDSNs {
 		if utils.IsEmpty(dsn) {
 			continue
 		}
@@ -90,7 +90,7 @@ func newPool(ctx context.Context, logger *zap.Logger, dsn string, maxConns, minC
 		return nil, err
 	}
 	maskedDSN := maskDSN(dsn) // Security: hide passwords
-	logger.Debug("PostgreSQL connection pool established", zap.String("dsn", maskedDSN))
+	logger.Debug("postgreSQL_connection_pool_established", zap.String("dsn", maskedDSN))
 	return pool, nil
 }
 

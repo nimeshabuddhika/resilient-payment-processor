@@ -11,4 +11,6 @@ EOSQL
 # Now connect to the new DB to create the dedicated schema
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname resilient_payment_processor <<-EOSQL
   CREATE SCHEMA IF NOT EXISTS svc_schema;
+  ALTER DATABASE resilient_payment_processor
+    SET search_path = svc_schema;
 EOSQL

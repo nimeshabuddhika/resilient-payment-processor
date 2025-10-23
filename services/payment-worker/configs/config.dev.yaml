@@ -13,7 +13,8 @@ KAFKA_RETRY_RETENTION: "24h"
 KAFKA_RETRY_DLQ_RETENTION: "72h"
 RETRY_BASE_BACKOFF: "30s"
 MAX_RETRY_BACKOFF: "5m"
-PRIMARY_DB_ADDR: "db_user:db_password@localhost:5432/resilient_payment_processor?sslmode=disable&search_path=svc_schema" # For local development only
+PRIMARY_DB_ADDR: "db_user:db_password@localhost:6432/resilient_payment_processor?sslmode=disable" # For local development only
+READ_DB_ADDR: "db_user:db_password@localhost:6433/resilient_payment_processor?sslmode=disable" # For local development only
 MAX_DB_CONNECTIONS: "20"
 MIN_DB_CONNECTIONS: "5"
 REDIS_ADDR: "localhost:6379"

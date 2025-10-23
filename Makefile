@@ -73,12 +73,6 @@ clean-payment-worker: ## Stop and remove payment-worker containers and image
 	fi
 	docker rmi payment-worker:latest || true
 
-.PHONY: clean-postgres
-clean-postgres: ## Stop and remove order-api container and image
-	@echo "Stopping and deleting postgres data"
-	docker rm -f postgres || true
-	docker volume rm resilient-payment-processor_pg-data || true
-
 .PHONY: clean-kafka
 clean-kafka: ## Stop and remove order-api container and image
 	@echo "Stopping and deleting kafka data"
@@ -106,7 +100,13 @@ clean-fraud-ml-service: ## Stop and remove fraud-ml-service container and image
 clean-services: clean-order-api clean-payment-worker clean-fraud-ml-service## Clean all services (containers, images)
 
 .PHONY: clean-data
-clean-data: clean-services clean-postgres clean-kafka clean-redis## Clean all services (containers, images, volumes)
+clean-data: clean-services clean-kafka clean-redis ## Clean all services (containers, images, volumes)
+
+##@ Cleanup
+.PHONY: clean
+clean: clean-services ## Cleaning project data
+	@echo "Cleaning $(PROJECT_NAME) project"
+	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) down --remove-orphans -v
 
 ##@ Seed
 .PHONY: seed-usage
@@ -122,7 +122,7 @@ seed-users-and-accounts: ## Seed Users and User accounts directly to the databas
 
 .PHONY: seed-orders
 seed-orders: ## Seed orders via order-api
-	go run $(ORDER_SEED_FILE)
+	go run $(ORDER_SEED_FILE) -orderApiUrl http://localhost:8081 -noOfOrders 1000
 
 .PHONY: seed
 seed: seed-users-and-accounts seed-orders ## Seed users accounts and orders
