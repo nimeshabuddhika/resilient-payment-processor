@@ -175,6 +175,7 @@ func (c *SeedOrderConfig) Start(totalOrders int) {
 			break
 		}
 		userPageNumber++
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	duration := time.Since(startTime)

@@ -55,58 +55,31 @@ docker-restart: ## Restart services
 			echo "No payment-worker containers to restart"; \
 		fi
 
-##@ Cleanup
-.PHONY: clean-order-api
-clean-order-api: ## Stop and remove order-api container and image
-	@echo "Stopping and removing order-api"
-	docker rm -f order-api || true
+##@ Remove images
+.PHONY: remove-order-api
+remove-order-api: ## Remove order-api image
+	@echo "removing order-api image"
 	docker rmi order-api:latest || true
 
-.PHONY: clean-payment-worker
-clean-payment-worker: ## Stop and remove payment-worker containers and image
-	@echo "Stopping and removing payment-worker"
-	@ids=$$(docker ps -aq --filter name=payment-worker); \
-	if [ -n "$$ids" ]; then \
-		docker rm -f $$ids; \
-	else \
-		echo "No payment-worker containers to remove"; \
-	fi
+.PHONY: remove-payment-worker
+remove-payment-worker: ## Remove payment-worker image
+	@echo "removing payment-worker image"
 	docker rmi payment-worker:latest || true
 
-.PHONY: clean-kafka
-clean-kafka: ## Stop and remove order-api container and image
-	@echo "Stopping and deleting kafka data"
-	docker rm -f kafka || true
-	docker volume rm resilient-payment-processor_kafka-data || true
-	docker volume rm resilient-payment-processor_kafka-secrets|| true
-	@echo "Stopping and deleting zookeeper data"
-	docker rm -f zookeeper || true
-	docker volume rm resilient-payment-processor_zookeeper-data || true
-	docker volume rm resilient-payment-processor_zookeeper-secrets || true
-
-.PHONY: clean-redis
-clean-redis: ## Stop and remove order-api container and image
-	@echo "Stopping and deleting redis data"
-	docker rm -f redis || true
-	docker volume rm resilient-payment-processor_redis-data || true
-
-.PHONY: clean-fraud-ml-service
-clean-fraud-ml-service: ## Stop and remove fraud-ml-service container and image
-	@echo "Stopping and deleting fraud-ml-service"
-	docker rm -f fraud-ml-service || true
+.PHONY: remove-fraud-ml-service
+remove-fraud-ml-service: ## Remove fraud-ml-service image
+	@echo "removing fraud-ml-service image"
 	docker rmi fraud-ml-service:latest || true
 
-.PHONY: clean-services
-clean-services: clean-order-api clean-payment-worker clean-fraud-ml-service## Clean all services (containers, images)
-
-.PHONY: clean-data
-clean-data: clean-services clean-kafka clean-redis ## Clean all services (containers, images, volumes)
+.PHONY: remove-images
+remove-images: remove-order-api remove-payment-worker remove-fraud-ml-service## Clean all images
 
 ##@ Cleanup
 .PHONY: clean
-clean: clean-services ## Cleaning project data
+clean: ## Cleaning project data
 	@echo "Cleaning $(PROJECT_NAME) project"
-	docker compose -f $(COMPOSE_FILE) -p $(PROJECT_NAME) down --remove-orphans -v
+	docker compose -f $(COMPOSE_FILE) --profile services -p $(PROJECT_NAME) down --remove-orphans -v
+	$(MAKE) remove-images
 
 ##@ Seed
 .PHONY: seed-usage
@@ -118,11 +91,11 @@ seed-help: ## Seed usage seeders
 
 .PHONY: seed-users-and-accounts
 seed-users-and-accounts: ## Seed Users and User accounts directly to the database
-	go run $(USER_SEED_FILE)
+	go run $(USER_SEED_FILE) -noOfUsers 5000
 
 .PHONY: seed-orders
 seed-orders: ## Seed orders via order-api
-	go run $(ORDER_SEED_FILE) -orderApiUrl http://localhost:8081 -noOfOrders 1000
+	go run $(ORDER_SEED_FILE) -orderApiUrl http://localhost:8081 -noOfOrders 5000 -noOfOrdersPerAccount 2
 
 .PHONY: seed
 seed: seed-users-and-accounts seed-orders ## Seed users accounts and orders
