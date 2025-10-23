@@ -9,6 +9,7 @@ import (
 	"github.com/bytedance/gopkg/util/logger"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
@@ -30,10 +31,10 @@ type KafkaOrderConfig struct {
 	PaymentProcessor PaymentProcessor
 
 	// internal initialization
-	consumer    *kafka.Consumer
-	dlqProducer *kafka.Producer
-	validate    *validator.Validate
-	orderSem    chan struct{} // Semaphore to limit concurrent order processing
+	orderConsumer *kafka.Consumer
+	dlqProducer   *kafka.Producer
+	validate      *validator.Validate
+	orderSem      chan struct{} // Semaphore to limit concurrent order processing
 }
 
 // NewKafkaOrderConsumer initializes a KafkaOrderHandler with the provided configuration.
@@ -82,8 +83,7 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 
 	// Initialize semaphore with configured max concurrent jobs
 	cfg.orderSem = make(chan struct{}, cfg.Config.MaxOrdersPlacedConcurrentJobs)
-	cfg.Logger.Info("initialized_order_concurrency", zap.Int("order_concurrent_limit", cfg.Config.MaxOrdersPlacedConcurrentJobs))
-	cfg.consumer = kafkaConsumer
+	cfg.orderConsumer = kafkaConsumer
 	cfg.dlqProducer = dlqProducer
 	cfg.validate = validator.New()
 	return &cfg
@@ -93,7 +93,7 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 // The loop runs in a goroutine, processing messages with concurrency control.
 func (k *KafkaOrderConfig) Start() func() {
 	// Subscribe to the configured Kafka topic
-	err := k.consumer.SubscribeTopics([]string{k.Config.KafkaOrderTopic}, nil)
+	err := k.orderConsumer.SubscribeTopics([]string{k.Config.KafkaOrderTopic}, nil)
 	if err != nil {
 		k.Logger.Fatal("Failed to subscribe to Kafka topic", zap.Error(err))
 	}
@@ -103,16 +103,19 @@ func (k *KafkaOrderConfig) Start() func() {
 		zap.String("group", k.Config.KafkaOrderConsumerGroup))
 	go func() {
 		for {
-			msg, err := k.consumer.ReadMessage(-1)
+			msg, err := k.orderConsumer.ReadMessage(-1)
 			if err != nil {
-				k.Logger.Error("Failed to read Kafka message", zap.Error(err))
+				k.Logger.Error("failed_to_read_kafka_message", zap.Error(err))
 				continue
 			}
 			// Acquire semaphore slot, blocking if limit is reached
 			k.Logger.Info("received_message", zap.Int("semaphore_size", len(k.orderSem)))
 			k.orderSem <- struct{}{}
 			go func(m *kafka.Message) {
-				defer func() { <-k.orderSem }() // Release slot after processing
+				defer func() {
+					<-k.orderSem // Release slot after processing
+					k.Logger.Info("released_order_semaphore", zap.Int("semaphore_size", len(k.orderSem)))
+				}()
 				k.processMessage(m)
 			}(msg)
 		}
@@ -124,7 +127,7 @@ func (k *KafkaOrderConfig) Start() func() {
 			k.dlqProducer.Flush(5000)
 			k.dlqProducer.Close()
 		}
-		if err := k.consumer.Close(); err != nil {
+		if err := k.orderConsumer.Close(); err != nil {
 			k.Logger.Error("failed_to_close_Kafka consumer", zap.Error(err))
 		}
 		k.Logger.Info("kafka_consumer_closed_successfully")
@@ -145,7 +148,7 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 	if err := json.Unmarshal(msg.Value, &job); err != nil {
 		k.Logger.Error("decode_message_failed", zap.Error(err))
 		k.sendToDLQ(job, "json_unmarshal_error", err.Error())
-		_, _ = k.consumer.CommitMessage(msg) // Commit to skip invalid message
+		k.Commit(uuid.Nil, msg) // Commit to skip invalid message
 		return
 	}
 
@@ -153,7 +156,7 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 	if err := k.validate.Struct(&job); err != nil {
 		k.Logger.Error("validate_job_failed", zap.Error(err))
 		k.sendToDLQ(job, "validation_error", err.Error())
-		_, _ = k.consumer.CommitMessage(msg) // Commit to skip invalid message
+		k.Commit(job.IdempotencyKey, msg) // Commit to skip invalid message
 		return
 	}
 
@@ -165,21 +168,26 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
 			zap.Error(procErr))
 		k.sendToDLQ(job, "processPaymentError", procErr.Error())
-		if _, err := k.consumer.CommitMessage(msg); err != nil {
-			k.Logger.Error("commit_after_dlq_failed", zap.Error(err))
-		}
+		// Commit to offset
+		k.Commit(job.IdempotencyKey, msg)
 		return
 	}
 	k.Logger.Info("payment_processed_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 	// Successfully processed, commit the offset
-	if _, err := k.consumer.CommitMessage(msg); err != nil {
-		k.Logger.Error("commit_offset_failed",
-			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
+	k.Commit(job.IdempotencyKey, msg)
+}
+
+// Commit kafka message
+func (k *KafkaOrderConfig) Commit(idempotencyKey uuid.UUID, msg *kafka.Message) {
+	// Successfully processed, commit the offset
+	if _, err := k.orderConsumer.CommitMessage(msg); err != nil {
+		k.Logger.Error("order_failed_to_commit",
+			zap.Any(pkg.IdempotencyKey, idempotencyKey),
 			zap.Error(err))
 		return
 	}
-	k.Logger.Info("payment_commited_successfully",
-		zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	k.Logger.Info("order_commited_successfully",
+		zap.Any(pkg.IdempotencyKey, idempotencyKey))
 }
 
 // sendToDLQ sends a failed job to the Dead Letter Queue with context.

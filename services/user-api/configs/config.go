@@ -11,7 +11,7 @@ import (
 // Config holds application configuration loaded from environment variables and optional config file.
 type Config struct {
 	PrimaryDbAddr string `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
-	ReplicaDbAddr string `mapstructure:"REPLICA_DB_ADDR"`
+	ReadDbAddr    string `mapstructure:"READ_DB_ADDR"`
 	MaxDbCons     int32  `mapstructure:"MAX_DB_CONNECTIONS" validate:"min=1"`
 	MinDbCons     int32  `mapstructure:"MIN_DB_CONNECTIONS" validate:"min=1"`
 	AesKey        string `mapstructure:"AES_KEY" validate:"required"`

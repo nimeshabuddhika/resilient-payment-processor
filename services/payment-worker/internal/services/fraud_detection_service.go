@@ -130,7 +130,7 @@ func (f *FraudDetectorConfig) computeVelocity(ctx context.Context, accountId uui
 
 // computeDeviation gets avg from cache or DB, computes relative deviation.
 func (f *FraudDetectorConfig) computeDeviation(ctx context.Context, accountID uuid.UUID, amount float64) (float64, error) {
-	cacheKey := fmt.Sprintf(RedisAvgKey, accountID.String())
+	cacheKey := GetDeviationRedisKey(accountID)
 	avgOrderAmountStr, err := f.Redis.Get(ctx, cacheKey).Result()
 	if errors.Is(err, redis.Nil) {
 		// Fetch from db
@@ -195,4 +195,9 @@ func (f *FraudDetectorConfig) AnalyzeTransaction(ctx context.Context, idempotenc
 	}
 	f.Logger.Info("ml_response", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Int("status_code", resp.StatusCode), zap.Error(err))
 	return result, err
+}
+
+// GetDeviationRedisKey returns the redis key
+func GetDeviationRedisKey(accountID uuid.UUID) string {
+	return fmt.Sprintf(RedisAvgKey, accountID.String())
 }

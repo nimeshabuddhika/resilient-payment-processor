@@ -58,10 +58,10 @@ func main() {
 
 	// Initialize postgres db
 	dbConfig := database.Config{
-		PrimaryDSN:  cfg.PrimaryDbAddr,
-		ReplicaDSNs: []string{cfg.ReplicaDbAddr},
-		MaxConns:    cfg.MaxDbCons,
-		MinConns:    cfg.MinDbCons,
+		PrimaryDSN: cfg.PrimaryDbAddr,
+		ReadDSNs:   []string{cfg.ReadDbAddr},
+		MaxConns:   cfg.MaxDbCons,
+		MinConns:   cfg.MinDbCons,
 	}
 
 	ctx := context.Background()

@@ -29,10 +29,10 @@ func NewApp(ctx context.Context, logger *zap.Logger) (*http.Server, func(), erro
 
 	// Initialize postgres db
 	dbConfig := database.Config{
-		PrimaryDSN:  cfg.PrimaryDbAddr,
-		ReplicaDSNs: []string{cfg.ReplicaDbAddr},
-		MaxConns:    cfg.MaxDbCons,
-		MinConns:    cfg.MinDbCons,
+		PrimaryDSN: cfg.PrimaryDbAddr,
+		ReadDSNs:   []string{cfg.ReadDbAddr},
+		MaxConns:   cfg.MaxDbCons,
+		MinConns:   cfg.MinDbCons,
 	}
 	db, disconnect, err := database.New(ctx, logger, dbConfig)
 	if err != nil {

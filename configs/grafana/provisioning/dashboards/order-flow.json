@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 0,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -36,7 +36,7 @@
         "x": 0,
         "y": 0
       },
-      "id": 2,
+      "id": 4,
       "options": {
         "dedupStrategy": "none",
         "enableInfiniteScrolling": false,
@@ -56,13 +56,25 @@
             "uid": "P8F7BD5764BAA734F"
           },
           "direction": "backward",
-          "editorMode": "code",
-          "expr": "{service_name=\"order-api\"} | json | level != \"\"",
+          "editorMode": "builder",
+          "expr": "{service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_commited_successfully`",
           "queryType": "range",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "builder",
+          "expr": "{service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `released_order_semaphore`",
+          "hide": false,
+          "queryType": "range",
+          "refId": "B"
         }
       ],
-      "title": "order-api",
+      "title": "Payment-worker logs",
       "type": "logs"
     },
     {
@@ -73,7 +85,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "continuous-GrYlRd"
           },
           "custom": {
             "axisBorderShow": false,
@@ -84,16 +96,19 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 25,
-            "gradientMode": "none",
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "viz": false
             },
             "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineInterpolation": "smooth",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 3,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -129,10 +144,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 8
+        "x": 12,
+        "y": 0
       },
-      "id": 1,
+      "id": 3,
       "options": {
         "legend": {
           "calcs": [],
@@ -155,7 +170,185 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "sum by(minutes)  (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | caller =~ \"^services/kafka_order_handler.*\" | msg = `Payment processed successfully`[1m]) )",
+          "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_commited_successfully`[$__range]))",
+          "hide": false,
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_failed_to_commit`[$__range]))",
+          "hide": false,
+          "queryType": "range",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `payment_processed_successfully`[$__range]))",
+          "hide": false,
+          "queryType": "range",
+          "refId": "C"
+        }
+      ],
+      "title": "Order success By Range",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8F7BD5764BAA734F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 13,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "msg"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `processing_payment_job`[$__range]))",
+          "hide": false,
+          "queryType": "range",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `payment_processed_successfully`[$__range]))",
+          "hide": false,
+          "queryType": "range",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `process_payment_failed_sending_to_dlq`[$__range]))",
+          "hide": false,
+          "queryType": "range",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_commited_successfully`[1m]) )",
           "legendFormat": "msg",
           "queryType": "range",
           "refId": "A",
@@ -168,18 +361,62 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "sum by(minutes)  (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | caller =~ \"^services/kafka_retry_handler.*\" | msg = `Payment processed successfully`[5m]) )",
-          "hide": true,
+          "expr": "sum by(msg)  (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | caller =~ \"^services/kafka_order_handler.*\" | msg = `order_failed_to_commit`[1m]) )",
+          "hide": false,
           "queryType": "range",
-          "refId": "B"
+          "refId": "E"
         }
       ],
-      "title": "payment-worker ",
+      "title": "Payment Worker - Order Success Rate",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "P8F7BD5764BAA734F"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 2,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": false,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "pluginVersion": "12.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{service_name=\"order-api\"} | json | level != \"\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "order-api",
+      "type": "logs"
     }
   ],
   "preload": false,
-  "refresh": "5s",
+  "refresh": "auto",
   "schemaVersion": 42,
   "tags": [],
   "templating": {
@@ -197,12 +434,12 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Payment worker",
   "uid": "addgs4b",
-  "version": 5
+  "version": 1
 }

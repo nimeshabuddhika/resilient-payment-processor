@@ -14,7 +14,7 @@ type UserRepository interface {
 	// Create creates a new user.
 	Create(ctx context.Context, tx pgx.Tx, user models.User) (pgconn.CommandTag, error)
 	UpdateBalanceCountAvgByAccountID(ctx context.Context, tx pgx.Tx, account models.Account) (int64, error)
-	GetUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error)
+	FindUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error)
 }
 
 type UserRepositoryImpl struct {
@@ -49,7 +49,7 @@ func (u UserRepositoryImpl) UpdateBalanceCountAvgByAccountID(ctx context.Context
 	return commandTag.RowsAffected(), nil
 }
 
-func (u UserRepositoryImpl) GetUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error) {
+func (u UserRepositoryImpl) FindUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error) {
 	//calculate offset.
 	offset := (pageNumber - 1) * size
 	rows, err := u.db.Query(ctx, `SELECT id, username, created_at, updated_at FROM svc_schema.users LIMIT $1 OFFSET $2`, size, offset)
