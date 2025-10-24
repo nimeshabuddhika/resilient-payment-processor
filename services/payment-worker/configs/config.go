@@ -36,6 +36,9 @@ type Config struct {
 	MaxOrdersPlacedConcurrentJobs int           `mapstructure:"MAX_ORDERS_PLACED_CONCURRENT_JOBS" validate:"min=1"`
 	MaxOrdersRetryConcurrentJobs  int           `mapstructure:"MAX_ORDERS_RETRY_CONCURRENT_JOBS" validate:"min=1"`
 	FraudMLServiceAddr            string        `mapstructure:"FRAUD_ML_SERVICE_ADDR"`
+	MlRateLimitPerSec             int           `mapstructure:"ML_RATE_LIMIT_PER_SEC" validate:"min=1"`
+	MlRequestBurst                int           `mapstructure:"ML_REQUEST_BURST" validate:"min=1"`
+	MlRequestMaxThrottleWait      time.Duration `mapstructure:"ML_REQUEST_MAX_THROTTLE_WAIT" validate:"required"` // Throttle wait guard: if the wait time is longer than this to get a token, fail fast
 }
 
 func Load(logger *zap.Logger) (*Config, error) {

@@ -79,7 +79,7 @@ func main() {
 		RedisClient: redisClient,
 		FraudDetector: services.NewFraudDetectionService(services.FraudDetectorConfig{
 			Logger:        logger,
-			Cnf:           cfg,
+			Config:        cfg,
 			AccountRepo:   accountRepo,
 			Redis:         redisClient,
 			EncryptionKey: aesKey,

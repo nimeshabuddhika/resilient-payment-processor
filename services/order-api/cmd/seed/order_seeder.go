@@ -37,7 +37,7 @@ type SeedOrderConfig struct {
 
 func main() {
 	noOfOrders := flag.Int("noOfOrders", 100, "Number of orders to seed")
-	maxConcurrentRequests := flag.Int("maxConcurrentRequests", 5, "Max concurrent requests")
+	maxConcurrentRequests := flag.Int("maxConcurrentRequests", 10, "Max concurrent requests")
 	maxAccountPerUser := flag.Int("maxAccountPerUser", 1, "Max number of accounts per user to seed")
 	noOfOrdersPerAccount := flag.Int("noOfOrdersPerAccount", 1, "Number of orders per account to seed")
 	minOrderAmount := flag.Float64("minOrderAmount", 10.0, "Min order amount")

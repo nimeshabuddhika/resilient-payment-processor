@@ -21,7 +21,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.39.0
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.39.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/time v0.6.0
+	golang.org/x/time v0.14.0
 )
 
 require (
