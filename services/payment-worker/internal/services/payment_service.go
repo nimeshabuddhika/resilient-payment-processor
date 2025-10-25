@@ -213,7 +213,7 @@ func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job dtos
 	}
 	if fraudStatus.IsEligibleForRetry {
 		p.Logger.Error("fraud_detection_failed_retrying", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("report", fraudStatus))
-		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "Retrying due to fraud detection failure")
+		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "Failed due to fraud detection failure")
 		p.RetryChannel <- job
 		return ErrFraudDetectionFailed
 	}
@@ -224,7 +224,7 @@ func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job dtos
 
 // updateOrderStatus updates the order status in the database and logs the outcome.
 func (p *PaymentProcessorConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
-	affectedRows, err := p.OrderRepo.UpdateStatusByIdempotencyID(ctx, tx, idempotencyKey, status, message)
+	affectedRows, err := p.OrderRepo.UpdateStatusByIdempotencyIDTx(ctx, tx, idempotencyKey, status, message)
 	if err != nil {
 		p.Logger.Error("failed_to_update_order_status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status))
 		// TODO: Implement order DLQ logic

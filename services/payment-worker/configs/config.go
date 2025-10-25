@@ -12,6 +12,7 @@ import (
 
 // Config holds application configuration for payment-worker.
 type Config struct {
+	MetricsAddr                   string        `mapstructure:"METRICS_ADDR" validate:"required"`
 	KafkaBrokers                  string        `mapstructure:"KAFKA_BROKERS" validate:"required"`
 	PrimaryDbAddr                 string        `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
 	ReadDbAddr                    string        `mapstructure:"READ_DB_ADDR"`
@@ -36,6 +37,9 @@ type Config struct {
 	MaxOrdersPlacedConcurrentJobs int           `mapstructure:"MAX_ORDERS_PLACED_CONCURRENT_JOBS" validate:"min=1"`
 	MaxOrdersRetryConcurrentJobs  int           `mapstructure:"MAX_ORDERS_RETRY_CONCURRENT_JOBS" validate:"min=1"`
 	FraudMLServiceAddr            string        `mapstructure:"FRAUD_ML_SERVICE_ADDR"`
+	MlRateLimitPerSec             int           `mapstructure:"ML_RATE_LIMIT_PER_SEC" validate:"min=1"`
+	MlRequestBurst                int           `mapstructure:"ML_REQUEST_BURST" validate:"min=1"`
+	MlRequestMaxThrottleWait      time.Duration `mapstructure:"ML_REQUEST_MAX_THROTTLE_WAIT" validate:"required"` // Throttle wait guard: if the wait time is longer than this to get a token, fail fast
 }
 
 func Load(logger *zap.Logger) (*Config, error) {

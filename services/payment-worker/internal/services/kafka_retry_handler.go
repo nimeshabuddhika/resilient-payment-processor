@@ -11,6 +11,7 @@ import (
 	"github.com/bytedance/gopkg/util/logger"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
@@ -42,11 +43,12 @@ type KafkaRetryConfig struct {
 	OrderRepo        repositories.OrderRepository
 
 	// internal initialization (set by NewKafkaRetryHandler)
-	validate         *validator.Validate
-	dlqRetryProducer *kafka.Producer
-	retryProducer    *kafka.Producer
-	retryConsumer    *kafka.Consumer
-	retrySemaphore   chan struct{} // semaphore to bound concurrent retry processing
+	validate           *validator.Validate
+	dlqRetryProducer   *kafka.Producer
+	retryProducer      *kafka.Producer
+	retryConsumer      *kafka.Consumer
+	retrySemaphore     chan struct{} // semaphore to bound concurrent retry processing
+	retryCommitManager *kafkautils.CommitManager
 }
 
 // NewKafkaRetryHandler builds a KafkaRetryHandler and wires producers, consumer,
@@ -127,12 +129,15 @@ func NewKafkaRetryHandler(cfg KafkaRetryConfig) KafkaRetryHandler {
 		cfg.Logger.Fatal("failed_to_create_retry_consumer", zap.Error(err))
 	}
 	cfg.Logger.Info("retry_consumer_created_successfully", zap.String("brokers", cfg.Config.KafkaBrokers))
+	// initialize commit manager for retry consumer
+	retryCommitManager := kafkautils.NewCommitManager(kafkaRetryConsumer, cfg.Logger)
 
 	// internal wiring
 	cfg.retrySemaphore = make(chan struct{}, cfg.Config.MaxOrdersRetryConcurrentJobs)
 	cfg.retryProducer = retryProducer
 	cfg.dlqRetryProducer = dlqProducer
 	cfg.retryConsumer = kafkaRetryConsumer
+	cfg.retryCommitManager = retryCommitManager
 	cfg.validate = validator.New()
 	return &cfg
 }
@@ -179,12 +184,8 @@ func (k *KafkaRetryConfig) startRetryChannelHandler() {
 
 			// increment retry and enforce max
 			job.RetryCount++
-			if job.RetryCount > k.Config.MaxRetryCount {
-				k.Logger.Error("maximum_retry_count_exceeded_in_channel",
-					zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-					zap.Int("retry_count", job.RetryCount),
-				)
-				k.sendToRetryDLQ(job, "maxRetryExceeded", fmt.Sprintf("Maximum retry count exceeded: %d", k.Config.MaxRetryCount))
+			// max retry check (update db internally)
+			if err := k.checkIfMaxRetryLimitExceeded(job, nil); err != nil {
 				continue
 			}
 
@@ -240,7 +241,18 @@ func (k *KafkaRetryConfig) startRetryConsumer() {
 			k.Logger.Error("failed_to_read_retry_message", zap.Error(err))
 			continue
 		}
-		go k.processRetryMessage(msg)
+
+		// acquire semaphore with context
+		select {
+		case k.retrySemaphore <- struct{}{}:
+		case <-k.Context.Done():
+			return
+		}
+
+		go func(m *kafka.Message) {
+			defer func() { <-k.retrySemaphore }()
+			k.processRetryMessage(m)
+		}(msg)
 	}
 }
 
@@ -254,20 +266,12 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 	default:
 	}
 
-	// acquire semaphore with context
-	select {
-	case k.retrySemaphore <- struct{}{}:
-	case <-k.Context.Done():
-		return
-	}
-	defer func() { <-k.retrySemaphore }()
-
 	// decode
 	var job dtos.PaymentJob
 	if err := json.Unmarshal(msg.Value, &job); err != nil {
 		k.Logger.Error("failed_to_decode_message", zap.Error(err))
 		k.sendToRetryDLQ(job, "Json unmarshal error", err.Error())
-		_, _ = k.retryConsumer.CommitMessage(msg) // commit to skip bad message
+		k.retryCommitManager.Ack(uuid.Nil, msg) // commit to skip bad message
 		return
 	}
 
@@ -275,7 +279,7 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 	if err := k.validate.Struct(&job); err != nil {
 		k.Logger.Error("failed_to_validate_message", zap.Error(err))
 		k.sendToRetryDLQ(job, "Validate Error", err.Error())
-		_, _ = k.retryConsumer.CommitMessage(msg) // commit to skip bad message
+		k.retryCommitManager.Ack(uuid.Nil, msg) // commit to skip bad message
 		return
 	}
 
@@ -289,7 +293,7 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 		sleepDuration := time.Until(job.NextRetryTime)
 		k.Logger.Info("enforcing_backoff_delay",
 			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-			zap.Duration("sleep_duration", sleepDuration),
+			zap.Duration("sleep_duration_sec", sleepDuration.Round(time.Second)),
 			zap.Int("retry_count", job.RetryCount),
 		)
 		time.Sleep(sleepDuration)
@@ -298,7 +302,7 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 	// re-check context after sleep
 	select {
 	case <-k.Context.Done():
-		return // do not commit; allow re-delivery
+		return // avoid commiting, allow re-delivery
 	default:
 	}
 
@@ -313,23 +317,14 @@ func (k *KafkaRetryConfig) processRetryMessage(msg *kafka.Message) {
 			zap.Error(procErr),
 		)
 		k.sendToRetryDLQ(job, "Process payment error", procErr.Error())
-		if _, err := k.retryConsumer.CommitMessage(msg); err != nil {
-			k.Logger.Error("failed_to_commit_offset_after_dlq", zap.Error(err))
-		}
+		k.retryCommitManager.Ack(job.IdempotencyKey, msg)
 		return
 	}
 
-	// success: commit offset
-	if _, err := k.retryConsumer.CommitMessage(msg); err != nil {
-		k.Logger.Error("failed_to_commit_offset",
-			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-			zap.Error(err),
-		)
-		return
-	}
 	k.Logger.Info("retry_payment_processed_successfully",
 		zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
 	)
+	k.retryCommitManager.Ack(job.IdempotencyKey, msg) // success: commit offset
 }
 
 // sendToRetryDLQ publishes a job and failure context to the retry DLQ topic.
@@ -372,42 +367,35 @@ func (k *KafkaRetryConfig) sendToRetryDLQ(job dtos.PaymentJob, reason, errMsg st
 // checkIfMaxRetryLimitExceeded updates state, DLQs, and commits if the job exceeded
 // the configured maximum retry count. Returns an error when the limit is exceeded.
 func (k *KafkaRetryConfig) checkIfMaxRetryLimitExceeded(job dtos.PaymentJob, msg *kafka.Message) error {
-	tx, err := k.DB.Begin(k.Context)
-	if err != nil {
-		k.Logger.Error("failed_to_begin_transaction_for_max_retry_check", zap.Error(err))
-		return err
-	}
-	defer func() {
-		if commitErr := k.DB.Commit(k.Context, tx); commitErr != nil {
-			k.Logger.Error("failed_to_commit_transaction_for_max_retry_check", zap.Error(commitErr))
-		}
-	}()
-
 	if job.RetryCount > k.Config.MaxRetryCount {
-		k.Logger.Error("maximum_retry_count_exceeded",
+		k.Logger.Warn("maximum_retry_count_exceeded",
 			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
 			zap.Int("retry_count", job.RetryCount),
 		)
 
 		affectedRows, err := k.OrderRepo.UpdateStatusByIdempotencyID(
-			k.Context, tx, job.IdempotencyKey, pkg.OrderStatusFailed,
+			k.Context, job.IdempotencyKey, pkg.OrderStatusFailed,
 			fmt.Sprintf("failed transaction after %d retries", job.RetryCount),
 		)
 		if err != nil {
-			k.Logger.Error("failed_to_update_order_status_for_max_retry", zap.Error(err))
+			k.Logger.Error("failed_to_update_order_status_for_max_retry",
+				zap.Int("retry_count", job.RetryCount),
+				zap.Error(err),
+				zap.Int64("affected_rows", affectedRows),
+			)
 		}
-		k.Logger.Info("max_retry_exceeded", zap.Int64("affected_rows", affectedRows))
+		k.Logger.Info("max_retry_exceeded_db_updated_successfully",
+			zap.Int("retry_count", job.RetryCount),
+			zap.Int64("affected_rows", affectedRows),
+		)
 		k.sendToRetryDLQ(job, "max retry exceeded", fmt.Sprintf("Max retry count exceeded: %d", k.Config.MaxRetryCount))
 
-		if _, commitErr := k.retryConsumer.CommitMessage(msg); commitErr != nil {
-			k.Logger.Error("failed_to_commit_after_max_retry_dlq",
-				zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-				zap.Error(commitErr),
-			)
+		// success: commit offset
+		if msg != nil {
+			k.retryCommitManager.Ack(job.IdempotencyKey, msg)
 		}
 		return errors.New("max retry count exceeded")
 	}
-
 	return nil
 }
 

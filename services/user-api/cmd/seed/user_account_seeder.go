@@ -37,7 +37,7 @@ func main() {
 	minAccountBalance := flag.Float64("minBalance", 700.0, "Min account balance")
 	maxAccountBalance := flag.Float64("maxBalance", 1000.0, "Max account balance")
 	fraudRate := flag.Float64("fraudRate", 0.01, "Fraud order rate for AI training")
-	exportData := flag.Bool("exportData", true, "Export AI dataset to JSON after seeding")
+	exportAiData := flag.Bool("exportAiData", false, "Generate and Export AI dataset to JSON after seeding")
 
 	flag.Parse()
 
@@ -140,51 +140,53 @@ func main() {
 					return err
 				}
 
-				// Seed orders with fraud (for AI: train Torch on anomalies).
-				noOfOrders := rand.Intn(10) + 1 // Volume for 100k+ sim.
-				for k := 0; k < noOfOrders; k++ {
-					isFraud := rand.Float64() < *fraudRate
-					amt := 50.0 + rand.Float64()*150.0
-					if isFraud {
-						amt = 1000.0 + rand.Float64()*4000.0 // Anomaly.
+				if *exportAiData {
+					// Seed orders with fraud
+					noOfOrders := rand.Intn(10) + 1
+					for k := 0; k < noOfOrders; k++ {
+						isFraud := rand.Float64() < *fraudRate
+						amt := 50.0 + rand.Float64()*150.0
+						if isFraud {
+							amt = 1000.0 + rand.Float64()*4000.0 // Anomaly.
+						}
+
+						// Generate features
+						hist := userHistories[userID]
+						hist.orderCount++
+						velocity := 1 + rand.Intn(5) // Simulated orders/hour (1-5 normal)
+						if isFraud {
+							velocity += rand.Intn(6) // Bias higher (up to 10) for fraud
+						}
+						deviation := 0.0
+						if hist.orderCount > 1 {
+							deviation = math.Abs(amt-hist.avgAmount) / hist.avgAmount
+						}
+
+						// Removed overriding bias to avoid label inconsistency
+
+						logger.Info("creating_order", zap.Any("user_id", userID), zap.Any("account_id", accID), zap.Float64("amt", amt), zap.Bool("is_fraud", isFraud))
+
+						// Assume models.Order extended with: TransactionVelocity int, IpAddress string, AmountDeviation float64
+						_, err = orderRepo.CreateAiDataset(ctx, tx, models.OrderAIModel{
+							UserID:              userID,
+							AccountID:           accID,
+							IdempotencyKey:      uuid.New(),
+							Amount:              roundFloatToTwo(amt),
+							Currency:            "CAD",
+							CreatedAt:           time.Now(),
+							UpdatedAt:           time.Now(),
+							IsFraud:             isFraud,
+							TransactionVelocity: velocity,
+							AmountDeviation:     deviation,
+						})
+						if err != nil {
+							return err
+						}
+
+						// Update history after features (consistent with calc)
+						hist.totalAmount += amt
+						hist.avgAmount = hist.totalAmount / float64(hist.orderCount)
 					}
-
-					// Generate features
-					hist := userHistories[userID]
-					hist.orderCount++
-					velocity := 1 + rand.Intn(5) // Simulated orders/hour (1-5 normal)
-					if isFraud {
-						velocity += rand.Intn(6) // Bias higher (up to 10) for fraud
-					}
-					deviation := 0.0
-					if hist.orderCount > 1 {
-						deviation = math.Abs(amt-hist.avgAmount) / hist.avgAmount
-					}
-
-					// Removed overriding bias to avoid label inconsistency
-
-					logger.Info("creating_order", zap.Any("user_id", userID), zap.Any("account_id", accID), zap.Float64("amt", amt), zap.Bool("is_fraud", isFraud))
-
-					// Assume models.Order extended with: TransactionVelocity int, IpAddress string, AmountDeviation float64
-					_, err = orderRepo.CreateAiDataset(ctx, tx, models.OrderAIModel{
-						UserID:              userID,
-						AccountID:           accID,
-						IdempotencyKey:      uuid.New(),
-						Amount:              roundFloatToTwo(amt),
-						Currency:            "CAD",
-						CreatedAt:           time.Now(),
-						UpdatedAt:           time.Now(),
-						IsFraud:             isFraud,
-						TransactionVelocity: velocity,
-						AmountDeviation:     deviation,
-					})
-					if err != nil {
-						return err
-					}
-
-					// Update history after features (consistent with calc)
-					hist.totalAmount += amt
-					hist.avgAmount = hist.totalAmount / float64(hist.orderCount)
 				}
 			}
 		}
@@ -197,7 +199,7 @@ func main() {
 	logger.Info("data_seeded_successfully")
 
 	// Optional export
-	if *exportData {
+	if *exportAiData {
 		orderPageNumber := 1 // Start from page 1
 		orderPageSize := 100 // Larger page size for efficiency
 		orderList := make([]dtos.OrderAIDto, 0)
