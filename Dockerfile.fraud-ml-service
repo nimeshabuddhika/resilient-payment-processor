@@ -1,24 +1,28 @@
 # Use slim base for maintainabilit
 FROM python:3.12-slim
 
-# Set workdir
 WORKDIR /app
 
-# Install system deps (e.g., for onnxruntime if needed; minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for layer caching
 COPY services/fraud-ml-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn  # Add Gunicorn for prod serving
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
-# Copy app and model (train subfolder included)
+# --- Multiprocess metrics directory ---
+ENV PROMETHEUS_MULTIPROC_DIR=/tmp/metrics
+RUN mkdir -p /tmp/metrics
+
+# Copy source
 COPY services/fraud-ml-service/app.py .
 COPY services/fraud-ml-service/train/fraud_model.onnx train/
 
-# Expose port (matches your env; configurable)
+# Clean multiprocess files at start (CRITICAL for restarts)
+COPY services/fraud-ml-service/docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8082
 
-# Run with Gunicorn for resilience (workers=4)
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "--bind", "0.0.0.0:8082", "--workers", "4", "app:app"]

@@ -1,4 +1,4 @@
-package middleware
+package observability
 
 import (
 	"strconv"
@@ -13,7 +13,7 @@ import (
 var (
 	httpRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "resilient_job_go", // Prefix for all metrics
+			Namespace: "order_api", // Prefix for all metrics
 			Name:      "http_request_duration_seconds",
 			Help:      "Duration of HTTP requests in seconds",
 			Buckets: []float64{
@@ -35,23 +35,11 @@ var (
 
 	httpRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "resilient_job_go",
+			Namespace: "order_api",
 			Name:      "http_requests_total",
 			Help:      "Total number of HTTP requests",
 		},
 		[]string{"method", "path", "status"},
-	)
-)
-
-// ActiveTransactions tracks active transactions via a gauge metric exposed by each payment-worker
-var (
-	ActiveTransactions = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "resilient_payment_processor",
-			Name:      "active_transactions",
-			Help:      "Number of transactions currently being processed by this worker",
-		},
-		[]string{"worker_id"},
 	)
 )
 

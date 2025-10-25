@@ -134,12 +134,12 @@ func (f *FraudDetectorConfig) Analyze(ctx context.Context, wg *sync.WaitGroup, s
 	// suspicious vs clean
 	if result.IsFraud {
 		f.Logger.Info("suspicious_transaction", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("result", result))
-		statusChan <- FraudStatus{IsEligibleForRetry: false, FraudFlag: FraudFlagSuspicious, Reason: "suspicious transaction", Score: result.FraudProbability}
+		statusChan <- FraudStatus{IsEligibleForRetry: false, FraudFlag: FraudFlagSuspicious, Reason: "suspicious transaction", Score: result.Score}
 		return
 	}
 	// regular transaction
 	f.Logger.Info("regular_transaction", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("result", result))
-	statusChan <- FraudStatus{FraudFlag: FraudFlagClean, Reason: "regular transaction", Score: result.FraudProbability}
+	statusChan <- FraudStatus{FraudFlag: FraudFlagClean, Reason: "regular transaction", Score: result.Score}
 }
 
 // computeVelocity increments and gets the counter with TTL (orders in window).
