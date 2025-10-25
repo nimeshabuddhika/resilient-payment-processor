@@ -12,6 +12,7 @@ import (
 
 // Config holds application configuration for payment-worker.
 type Config struct {
+	MetricsAddr                   string        `mapstructure:"METRICS_ADDR" validate:"required"`
 	KafkaBrokers                  string        `mapstructure:"KAFKA_BROKERS" validate:"required"`
 	PrimaryDbAddr                 string        `mapstructure:"PRIMARY_DB_ADDR" validate:"required"`
 	ReadDbAddr                    string        `mapstructure:"READ_DB_ADDR"`

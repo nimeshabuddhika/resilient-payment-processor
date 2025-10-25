@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +17,7 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/internal/services"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -30,6 +33,20 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed_to_load_config", zap.Error(err))
 	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	metricsSrv := &http.Server{
+		Addr:              cfg.MetricsAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+	go func() {
+		logger.Info("starting_metrics_server", zap.String("addr", cfg.MetricsAddr))
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatal("metrics_server_failed", zap.Error(err))
+		}
+	}()
 
 	// Initialize PostgreSQL database connection
 	dbConfig := database.Config{
@@ -117,6 +134,7 @@ func main() {
 	logger.Info("Received_shutdown_signal", zap.String("signal", osSignal.String()))
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
+	_ = metricsSrv.Shutdown(shutdownCtx)
 	cancel() // Trigger context cancellation
 	closeOrderConsumer()
 	redisCloser()

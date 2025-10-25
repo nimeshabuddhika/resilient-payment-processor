@@ -14,6 +14,8 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/dtos"
 	kafkautils "github.com/nimeshabuddhika/resilient-payment-processor/pkg/kafka"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
+	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/internal/observability"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -86,6 +88,16 @@ func NewKafkaOrderConsumer(cfg KafkaOrderConfig) KafkaOrderHandler {
 
 	// Initialize semaphore with configured max concurrent jobs
 	cfg.orderSem = make(chan struct{}, cfg.Config.MaxOrdersPlacedConcurrentJobs)
+	// Register Prometheus metric for semaphore size
+	prometheus.MustRegister(prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Name: "payment_worker_semaphore_used",
+			Help: "How many slots are currently in use in the order semaphore",
+		},
+		func() float64 {
+			return float64(len(cfg.orderSem))
+		},
+	))
 	cfg.orderConsumer = kafkaConsumer
 	cfg.commitManager = commitManager
 	cfg.dlqProducer = dlqProducer
@@ -112,13 +124,28 @@ func (k *KafkaOrderConfig) Start() func() {
 				k.Logger.Error("failed_to_read_kafka_message", zap.Error(err))
 				continue
 			}
+			// Increment message counter for Prometheus
+			topic := *msg.TopicPartition.Topic
+			observability.MessagesReceived.WithLabelValues(topic).Inc()
+
 			// Acquire semaphore slot, blocking if limit is reached
-			k.Logger.Debug("received_message", zap.Int("semaphore_size", len(k.orderSem)))
-			k.orderSem <- struct{}{}
+			// acquire semaphore with context
+			select {
+			case <-k.Context.Done():
+				k.Logger.Error("context_cancelled_while_processing_message")
+				return
+			case k.orderSem <- struct{}{}:
+			}
+
+			timer := prometheus.NewTimer(observability.ProcessLatency.WithLabelValues(topic))
+			observability.InflightJobs.Inc()
 			go func(m *kafka.Message) {
 				defer func() {
 					<-k.orderSem // Release slot after processing
 					k.Logger.Debug("released_order_semaphore", zap.Int("semaphore_size", len(k.orderSem)))
+					// Decrement message counter for Prometheus
+					observability.InflightJobs.Dec()
+					timer.ObserveDuration()
 				}()
 				k.processMessage(m)
 			}(msg)
@@ -151,6 +178,7 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 	var job dtos.PaymentJob
 	if err := json.Unmarshal(msg.Value, &job); err != nil {
 		k.Logger.Error("decode_message_failed", zap.Error(err))
+		observability.PaymentsFailed.WithLabelValues(*msg.TopicPartition.Topic, "decode").Inc()
 		k.sendToDLQ(job, "json_unmarshal_error", err.Error())
 		k.commitManager.Ack(uuid.Nil, msg) // Commit to skip invalid message
 		return
@@ -159,6 +187,7 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 	// Validate the decoded job structure
 	if err := k.validate.Struct(&job); err != nil {
 		k.Logger.Error("validate_job_failed", zap.Error(err))
+		observability.PaymentsFailed.WithLabelValues(*msg.TopicPartition.Topic, "validation").Inc()
 		k.sendToDLQ(job, "validation_error", err.Error())
 		k.commitManager.Ack(job.IdempotencyKey, msg) // Commit to skip invalid message
 		return
@@ -170,14 +199,17 @@ func (k *KafkaOrderConfig) processMessage(msg *kafka.Message) {
 	if procErr != nil {
 		k.Logger.Error("process_payment_failed_sending_to_dlq",
 			zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
-			zap.Error(procErr))
-		k.sendToDLQ(job, "processPaymentError", procErr.Error())
+			zap.Error(procErr),
+		)
+		observability.PaymentsFailed.WithLabelValues(*msg.TopicPartition.Topic, procErr.Error()).Inc()
+		k.sendToDLQ(job, procErr.Error(), procErr.Error())
 		// Commit to offset
 		k.commitManager.Ack(job.IdempotencyKey, msg)
 		return
 	}
-	k.Logger.Info("payment_processed_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 	// Successfully processed, commit the offset
+	k.Logger.Info("payment_processed_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+	observability.PaymentsProcessed.WithLabelValues(*msg.TopicPartition.Topic).Inc()
 	k.commitManager.Ack(job.IdempotencyKey, msg)
 }
 
@@ -214,4 +246,8 @@ func (k *KafkaOrderConfig) sendToDLQ(job dtos.PaymentJob, reason, errMsg string)
 	k.Logger.Info("sent_to_dlq",
 		zap.Any(pkg.IdempotencyKey, job.IdempotencyKey),
 		zap.String("reason", reason))
+	// Increment DLQ published counter for Prometheus
+	observability.DLQPublished.
+		WithLabelValues(k.Config.KafkaDLQTopic, reason).
+		Inc()
 }

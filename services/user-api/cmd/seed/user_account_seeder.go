@@ -37,7 +37,7 @@ func main() {
 	minAccountBalance := flag.Float64("minBalance", 700.0, "Min account balance")
 	maxAccountBalance := flag.Float64("maxBalance", 1000.0, "Max account balance")
 	fraudRate := flag.Float64("fraudRate", 0.01, "Fraud order rate for AI training")
-	exportAiData := flag.Bool("exportAiData", true, "Generate and Export AI dataset to JSON after seeding")
+	exportAiData := flag.Bool("exportAiData", false, "Generate and Export AI dataset to JSON after seeding")
 
 	flag.Parse()
 
@@ -141,8 +141,8 @@ func main() {
 				}
 
 				if *exportAiData {
-					// Seed orders with fraud (for AI: train Torch on anomalies).
-					noOfOrders := rand.Intn(10) + 1 // Volume for 100k+ sim.
+					// Seed orders with fraud
+					noOfOrders := rand.Intn(10) + 1
 					for k := 0; k < noOfOrders; k++ {
 						isFraud := rand.Float64() < *fraudRate
 						amt := 50.0 + rand.Float64()*150.0

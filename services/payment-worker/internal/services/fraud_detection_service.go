@@ -16,7 +16,7 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/repositories"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/utils"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/configs"
-	pw_dtos "github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/dtos"
+	pwdtos "github.com/nimeshabuddhika/resilient-payment-processor/services/payment-worker/dtos"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -77,7 +77,7 @@ func NewFraudDetectionService(fdConf FraudDetectorConfig) FraudDetector {
 	fdConf.fraudMLAddr = fmt.Sprintf("%s/api/v1/fraud-ml/predict", fdConf.Config.FraudMLServiceAddr)
 	fdConf.Logger.Info("fraud_ml_server_address", zap.String("url", fdConf.fraudMLAddr))
 
-	// initialize HTTP client
+	// initialize HTTP client (pooled, timeouts)
 	fdConf.httpClient = utils.NewHTTPClient(
 		utils.WithClientTimeout(defaultClientTimeout),
 		utils.WithResponseHeaderTimeout(defaultResponseHeaderTimeout),
@@ -119,7 +119,7 @@ func (f *FraudDetectorConfig) Analyze(ctx context.Context, wg *sync.WaitGroup, s
 	f.Logger.Debug("deviation", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Float64("deviation", deviation))
 
 	// Integration with fraud-ml-service
-	result, err := f.getFraudReport(ctx, job.IdempotencyKey, pw_dtos.PredictRequest{
+	result, err := f.getFraudReport(ctx, job.IdempotencyKey, pwdtos.PredictRequest{
 		Amount:              amount,
 		TransactionVelocity: velocity,
 		AmountDeviation:     deviation,
@@ -196,13 +196,13 @@ func (f *FraudDetectorConfig) computeDeviation(ctx context.Context, accountID uu
 // - per-pod rate limit with bounded wait (token bucket)
 // - hardened HTTP client (pooling + timeouts)
 // - request-scoped timeout & full error propagation
-func (f *FraudDetectorConfig) getFraudReport(ctx context.Context, idempotencyKey uuid.UUID, request pw_dtos.PredictRequest) (pw_dtos.PredictResponse, error) {
+func (f *FraudDetectorConfig) getFraudReport(ctx context.Context, idempotencyKey uuid.UUID, request pwdtos.PredictRequest) (pwdtos.PredictResponse, error) {
 	// 1. per pod throttle with bounded wait using reserve
 	now := time.Now()
 	reservation := f.rateLimiter.ReserveN(now, 1)
 	if !reservation.OK() {
 		f.Logger.Warn("ml_request_throttled_rejected", zap.Any(pkg.IdempotencyKey, idempotencyKey))
-		return pw_dtos.PredictResponse{}, ErrMLThrottled
+		return pwdtos.PredictResponse{}, ErrMLThrottled
 	}
 	delay := reservation.DelayFrom(now)
 	if delay > f.Config.MlRequestMaxThrottleWait {
@@ -212,7 +212,7 @@ func (f *FraudDetectorConfig) getFraudReport(ctx context.Context, idempotencyKey
 			zap.Any(pkg.IdempotencyKey, idempotencyKey),
 			zap.Duration("throttle_delay_sec", delay.Round(time.Second)),
 		)
-		return pw_dtos.PredictResponse{}, ErrMLThrottled
+		return pwdtos.PredictResponse{}, ErrMLThrottled
 	}
 
 	// short, bounded wait
@@ -223,7 +223,7 @@ func (f *FraudDetectorConfig) getFraudReport(ctx context.Context, idempotencyKey
 		case <-ctx.Done():
 			reservation.Cancel() // return token to limiter
 			f.Logger.Warn("ml_throttle_wait_context_cancelled", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(ctx.Err()))
-			return pw_dtos.PredictResponse{}, ctx.Err()
+			return pwdtos.PredictResponse{}, ctx.Err()
 		case <-timer.C:
 		}
 	}
@@ -232,14 +232,14 @@ func (f *FraudDetectorConfig) getFraudReport(ctx context.Context, idempotencyKey
 	reqBytes, err := json.Marshal(request)
 	if err != nil {
 		f.Logger.Error("ml_request_marshal_failed", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err))
-		return pw_dtos.PredictResponse{}, err
+		return pwdtos.PredictResponse{}, err
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, defaultClientTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, f.fraudMLAddr, bytes.NewReader(reqBytes))
 	if err != nil {
-		return pw_dtos.PredictResponse{}, err
+		return pwdtos.PredictResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -247,7 +247,7 @@ func (f *FraudDetectorConfig) getFraudReport(ctx context.Context, idempotencyKey
 	resp, err := f.httpClient.Do(req)
 	if err != nil {
 		f.Logger.Error("ml_request_error", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err))
-		return pw_dtos.PredictResponse{}, err
+		return pwdtos.PredictResponse{}, err
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -257,14 +257,14 @@ func (f *FraudDetectorConfig) getFraudReport(ctx context.Context, idempotencyKey
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf("ml_request_failed_status: %d", resp.StatusCode)
 		f.Logger.Error("ml_request_failed", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Int("status_code", resp.StatusCode), zap.Error(err))
-		return pw_dtos.PredictResponse{}, err
+		return pwdtos.PredictResponse{}, err
 	}
 
 	// 5. decode response
-	var result pw_dtos.PredictResponse
+	var result pwdtos.PredictResponse
 	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		f.Logger.Error("failed_to_decode_response", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err))
-		return pw_dtos.PredictResponse{}, err
+		return pwdtos.PredictResponse{}, err
 	}
 
 	f.Logger.Debug("ml_response", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Int("status_code", resp.StatusCode))

@@ -38,7 +38,7 @@ var (
 )
 
 const (
-	TransactionProcessingDelay = 1 * time.Millisecond
+	TransactionProcessingDelay = 100 * time.Millisecond
 )
 
 // TransactionResult represents the outcome of a transaction attempt.

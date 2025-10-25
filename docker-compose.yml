@@ -190,6 +190,7 @@ services:
       replicas: 1
     environment:
       GIN_MODE: "release"
+      APP_METRICS_ADDR: ":2112"
       APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
       APP_KAFKA_BROKERS: "kafka:29092" # For local development only
       APP_KAFKA_ORDER_TOPIC: "orders-placed"
@@ -223,6 +224,7 @@ services:
     labels: {
       logging: "promtail"
     }
+
   fraud-ml-service:
     image: fraud-ml-service:latest
     build:
