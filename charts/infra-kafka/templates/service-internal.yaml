@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: infra
+spec:
+  type: ClusterIP
+  selector: { app: kafka }
+  ports:
+    - name: broker
+      port: {{ .Values.service.internalPort }}
+      targetPort: broker
+    - name: controller
+      port: {{ .Values.service.controllerPort }}
+      targetPort: controller

@@ -1,0 +1,27 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: rpp
+servers: 1
+agents: 3
+image: rancher/k3s:v1.34.1-k3s1
+# Expose HTTP via the k3d load balancer
+ports:
+  - port: 80:80
+    nodeFilters: [loadbalancer]
+  - port: 443:443
+    nodeFilters: [loadbalancer]
+
+# Local registry
+registries:
+  create:
+    name: rpp-registry
+    host: "0.0.0.0"
+    hostPort: "5001"        # local registry: localhost:5001
+
+options:
+  k3d:
+    wait: true
+    timeout: "300s"
+  k3s:
+    extraArgs: []

@@ -1,0 +1,44 @@
+image:
+  repository: confluentinc/cp-kafka
+  tag: "8.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# Pin to infra node by default (can be overridden per env)
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "2"
+    memory: "2Gi"
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""  # k3d: usually "local-path"; leave empty to use default
+
+clusterId: "wwzzneZZTnC4sIfebR08Yw"  # replace with your generated ID
+
+service:
+  # Internal service used by other pods in-cluster (like your workers)
+  internalPort: 29092
+  controllerPort: 29093
+  # External NodePort for host access from your laptop/tools
+  external:
+    enabled: true
+    nodePort: 30092 # access via localhost:30092 (you can remap via k3d ports if you want 9092)
+
+advertised:
+  # K8s DNS for internal listener
+  internal: "kafka.infra.svc.cluster.local:29092"
+  # For host access on k3d; host.k3d.internal resolves to the docker host from inside containers
+  external: "host.k3d.internal:30092"
+
+serviceAccount:
+  create: false
