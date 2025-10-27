@@ -86,7 +86,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "sum(rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[1m]))"
+              "options": "sum(rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[1m0s]))"
             },
             "properties": [
               {
@@ -98,7 +98,7 @@
               },
               {
                 "id": "displayName",
-                "value": "RPS (1m)"
+                "value": "RPS (total)"
               }
             ]
           },
@@ -118,21 +118,6 @@
               {
                 "id": "displayName",
                 "value": "RPS by status (1m)"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "RPS by status (1m)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-blue",
-                  "mode": "fixed"
-                }
               }
             ]
           }
@@ -158,7 +143,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "datasource": {
@@ -166,7 +151,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "sum(rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[1m]))",
+          "expr": "sum(rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -177,7 +162,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "sum by (status) (\n  rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n)",
+          "expr": "sum by (status) (\n  rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval])\n)",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -268,6 +253,30 @@
                 "value": "Success rate % (2xx)"
               }
             ]
+          },
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "Success rate % (2xx)"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": true
+                }
+              }
+            ]
           }
         ]
       },
@@ -291,11 +300,12 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
           "expr": "100 *\nsum(rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\", status=~\"2..\"}[1m]))\n/\nsum(rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[1m]))",
+          "hide": false,
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -327,7 +337,7 @@
           "refId": "C"
         }
       ],
-      "title": "Success & Error Rates",
+      "title": "Success & Error Rates (%)",
       "type": "timeseries"
     },
     {
@@ -395,7 +405,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.50,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)"
+              "options": "histogram_quantile(0.50,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m0s])\n  )\n)"
             },
             "properties": [
               {
@@ -414,7 +424,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.90,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)"
+              "options": "histogram_quantile(0.90,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m0s])\n  )\n)"
             },
             "properties": [
               {
@@ -433,7 +443,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.95,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)"
+              "options": "histogram_quantile(0.95,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m0s])\n  )\n)"
             },
             "properties": [
               {
@@ -452,7 +462,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.99,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)"
+              "options": "histogram_quantile(0.99,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m0s])\n  )\n)"
             },
             "properties": [
               {
@@ -471,7 +481,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "sum(rate(order_api_http_request_duration_seconds_sum{method=\"POST\", path=\"/api/v1/orders\"}[1m]))\n/\nsum(rate(order_api_http_request_duration_seconds_count{method=\"POST\", path=\"/api/v1/orders\"}[1m]))"
+              "options": "sum(rate(order_api_http_request_duration_seconds_sum{method=\"POST\", path=\"/api/v1/orders\"}[1m0s]))\n/\nsum(rate(order_api_http_request_duration_seconds_count{method=\"POST\", path=\"/api/v1/orders\"}[1m0s]))"
             },
             "properties": [
               {
@@ -512,11 +522,11 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)",
+          "expr": "histogram_quantile(0.50,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval])\n  )\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -527,7 +537,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.90,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)",
+          "expr": "histogram_quantile(0.90,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval])\n  )\n)",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -540,7 +550,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)",
+          "expr": "histogram_quantile(0.95,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval])\n  )\n)",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -553,7 +563,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n  )\n)",
+          "expr": "histogram_quantile(0.99,\n  sum by (le) (\n    rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval])\n  )\n)",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -566,7 +576,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "sum(rate(order_api_http_request_duration_seconds_sum{method=\"POST\", path=\"/api/v1/orders\"}[1m]))\n/\nsum(rate(order_api_http_request_duration_seconds_count{method=\"POST\", path=\"/api/v1/orders\"}[1m]))",
+          "expr": "sum(rate(order_api_http_request_duration_seconds_sum{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval]))\n/\nsum(rate(order_api_http_request_duration_seconds_count{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -638,11 +648,11 @@
           "reverse": false
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (le) (\n  rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[1m])\n)",
+          "expr": "sum by (le) (\n  rate(order_api_http_request_duration_seconds_bucket{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval])\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -733,11 +743,11 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (status) (rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[1m]))",
+          "expr": "sum by (status) (rate(order_api_http_requests_total{method=\"POST\", path=\"/api/v1/orders\"}[$__rate_interval]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"

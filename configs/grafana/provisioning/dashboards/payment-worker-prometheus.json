@@ -60,7 +60,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "percent"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -79,13 +79,14 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "100 * (sum(rate(pw_order_handler_processed_total[1m])) / clamp_min(sum(rate(pw_order_handler_messages_received_total[1m])), 1e-9))"
+              "options": "100 *\n(\n  sum(rate(pw_order_handler_processed_total[1m0s]))\n  /\n  clamp_min(sum(rate(pw_order_handler_messages_received_total[1m0s])), 1e-9)\n)"
             },
             "properties": [
               {
@@ -126,11 +127,11 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * (sum(rate(pw_order_handler_processed_total[1m])) / clamp_min(sum(rate(pw_order_handler_messages_received_total[1m])), 1e-9))",
+          "expr": "100 *\n(\n  sum(rate(pw_order_handler_processed_total[$__rate_interval]))\n  /\n  clamp_min(sum(rate(pw_order_handler_messages_received_total[$__rate_interval])), 1e-9)\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -141,7 +142,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "100 * (sum(rate(pw_order_handler_failed_total[1m])) / clamp_min(sum(rate(pw_order_handler_messages_received_total[1m])), 1e-9))",
+          "expr": "100 * \n(\n  sum(rate(pw_order_handler_failed_total[$__rate_interval])) \n  / \n  clamp_min(sum(rate(pw_order_handler_messages_received_total[$__rate_interval])), 1e-9)\n)",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -157,7 +158,7 @@
         "type": "prometheus",
         "uid": "P15DD9179034F6BA1"
       },
-      "description": "* P50\n* P95\n* P99",
+      "description": "End-to-end processing time for a single payment job inside the worker.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -217,7 +218,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.50, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))"
+              "options": "histogram_quantile(0.50, \n  sum(rate(pw_order_handler_process_duration_seconds_bucket[1m0s])) by (le)\n)"
             },
             "properties": [
               {
@@ -236,7 +237,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.90, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))"
+              "options": "histogram_quantile(0.90, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m0s])) by (le))"
             },
             "properties": [
               {
@@ -255,7 +256,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.95, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))"
+              "options": "histogram_quantile(0.95, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m0s])) by (le))"
             },
             "properties": [
               {
@@ -274,7 +275,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "histogram_quantile(0.99, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))"
+              "options": "histogram_quantile(0.99, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m0s])) by (le))"
             },
             "properties": [
               {
@@ -312,11 +313,11 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, \n  sum(rate(pw_order_handler_process_duration_seconds_bucket[$__rate_interval])) by (le)\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -327,7 +328,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(pw_order_handler_process_duration_seconds_bucket[$__rate_interval])) by (le))",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -339,7 +340,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(pw_order_handler_process_duration_seconds_bucket[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -352,7 +353,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(pw_order_handler_process_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(pw_order_handler_process_duration_seconds_bucket[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -360,7 +361,7 @@
           "refId": "C"
         }
       ],
-      "title": "Latency (histogram)",
+      "title": "Latency (Histogram Quantiles)",
       "type": "timeseries"
     },
     {
@@ -368,7 +369,7 @@
         "type": "prometheus",
         "uid": "P15DD9179034F6BA1"
       },
-      "description": "* Received/sec (cluster)\n* Processed/sec by topic",
+      "description": "Rate of messages received from Kafka vs. successfully processed jobs per topic. ",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -421,13 +422,14 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "cps"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "sum(rate(pw_order_handler_processed_total[1m]))"
+              "options": "sum(rate(pw_order_handler_processed_total[1m0s]))"
             },
             "properties": [
               {
@@ -446,7 +448,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "sum(rate(pw_order_handler_messages_received_total[1m]))"
+              "options": "sum(rate(pw_order_handler_messages_received_total[1m0s]))"
             },
             "properties": [
               {
@@ -484,11 +486,12 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(pw_order_handler_messages_received_total[1m]))",
+          "expr": "sum(rate(pw_order_handler_messages_received_total[$__rate_interval]))",
+          "hide": true,
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -499,7 +502,7 @@
             "uid": "P15DD9179034F6BA1"
           },
           "editorMode": "code",
-          "expr": "sum(rate(pw_order_handler_processed_total[1m]))",
+          "expr": "sum(rate(pw_order_handler_processed_total[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -507,7 +510,7 @@
           "refId": "B"
         }
       ],
-      "title": "Received vs Processed By topic",
+      "title": "Received vs Processed by Topic",
       "type": "timeseries"
     },
     {
@@ -515,132 +518,7 @@
         "type": "prometheus",
         "uid": "P15DD9179034F6BA1"
       },
-      "description": "rate(..[1m]) returns a per-second rate, but it estimates that rate using the last 1 minutes of samples. The unit is still “/sec”. The 1 minutes is just the smoothing window.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepBefore",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "processing"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "account locked by another process"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.2.0",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (reason) (rate(pw_order_handler_failed_total[1m]))",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Failures/sec by reason",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P15DD9179034F6BA1"
-      },
+      "description": "Real-time number of jobs currently being processed (not yet acknowledged).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -693,7 +571,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "jobs"
         },
         "overrides": [
           {
@@ -720,8 +599,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 16
+        "x": 12,
+        "y": 8
       },
       "id": 9,
       "options": {
@@ -737,7 +616,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
@@ -845,7 +724,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
+        "x": 0,
         "y": 16
       },
       "id": 5,
@@ -862,7 +741,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.0",
+      "pluginVersion": "12.2.1",
       "targets": [
         {
           "editorMode": "code",
@@ -873,6 +752,132 @@
         }
       ],
       "title": "DLQ/sec by reason",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P15DD9179034F6BA1"
+      },
+      "description": "rate(..[1m]) returns a per-second rate, but it estimates that rate using the last 1 minutes of samples. The unit is still “/sec”. The 1 minutes is just the smoothing window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "processing"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "account locked by another process"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (reason) (rate(pw_order_handler_failed_total[1m]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failures/sec by reason",
       "type": "timeseries"
     }
   ],
@@ -891,5 +896,5 @@
   "timezone": "browser",
   "title": "Payment Worker - Prometheus",
   "uid": "adkfv6z",
-  "version": 1
+  "version": 2
 }
