@@ -12,6 +12,7 @@ import (
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/configs"
 	_ "github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/docs"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/handlers"
+	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/observability"
 	"github.com/nimeshabuddhika/resilient-payment-processor/services/order-api/internal/services"
 	"github.com/swaggo/files"
 	"github.com/swaggo/gin-swagger"
@@ -60,7 +61,7 @@ func NewApp(ctx context.Context, logger *zap.Logger) (*http.Server, func(), erro
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.TraceID(logger))
-	api.Use(middleware.Metrics())
+	api.Use(observability.Metrics())
 
 	orderHandler.RegisterRoutes(api)
 	baseHandler.RegisterRoutes(r)

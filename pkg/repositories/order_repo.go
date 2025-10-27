@@ -17,8 +17,12 @@ type OrderRepository interface {
 	// Create creates a new order.
 	Create(ctx context.Context, tx pgx.Tx, order models.Order) (pgconn.CommandTag, error)
 	FindByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (bool, error)
+	// UpdateStatusByIdempotencyIDTx updates the status of an order by idempotency key.
+	// transaction is required to ensure idempotency.
+	UpdateStatusByIdempotencyIDTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
 	// UpdateStatusByIdempotencyID updates the status of an order by idempotency key.
-	UpdateStatusByIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
+	// transaction is not required to ensure idempotency.
+	UpdateStatusByIdempotencyID(ctx context.Context, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
 
 	// CreateAiDataset creates a new order in the AI dataset table.
 	// This is used for training the AI model.
@@ -60,8 +64,17 @@ func (o *OrderRepositoryImpl) FindByIdempotencyKey(ctx context.Context, idempote
 	return exists, err
 }
 
-func (o *OrderRepositoryImpl) UpdateStatusByIdempotencyID(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error) {
+func (o *OrderRepositoryImpl) UpdateStatusByIdempotencyIDTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error) {
 	commandTag, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4`,
+		status, message, time.Now(), idempotencyID)
+	if err != nil {
+		return 0, err
+	}
+	return commandTag.RowsAffected(), nil
+}
+
+func (o *OrderRepositoryImpl) UpdateStatusByIdempotencyID(ctx context.Context, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error) {
+	commandTag, err := o.db.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4`,
 		status, message, time.Now(), idempotencyID)
 	if err != nil {
 		return 0, err

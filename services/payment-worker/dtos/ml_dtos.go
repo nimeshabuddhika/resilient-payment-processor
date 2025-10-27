@@ -7,7 +7,7 @@ type PredictRequest struct {
 }
 
 type PredictResponse struct {
-	FraudProbability float64 `json:"fraudProbability"`
-	IsFraud          bool    `json:"isFraud"`
-	Threshold        float64 `json:"threshold"`
+	Score     float64 `json:"score"`
+	IsFraud   bool    `json:"isFraud"`
+	Threshold float64 `json:"threshold"`
 }

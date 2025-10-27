@@ -22,12 +22,12 @@ Docker Compose brings up:
 
 ## Addresses & Ports
 
-| Purpose | Container DNS (inside Compose network) | Port (in-container) | Host Port |
-|---|---|---:|---:|
-| Primary (writes via pool) | `pgbouncer-write` | 6432 | `localhost:6432` |
-| Read LB (reads via pool) | `pgbouncer-read` | 6432 | `localhost:6433` |
-| HAProxy (replicas, L4) | `haproxy-read` | 5432 | `localhost:5440` |
-| Primary (direct) | `postgres-primary` | 5432 | `localhost:5432` |
+| Purpose                   | Container DNS (inside Compose network) | Port (in-container) |        Host Port |
+|---------------------------|----------------------------------------|--------------------:|-----------------:|
+| Primary (writes via pool) | `pgbouncer-write`                      |                6432 | `localhost:6432` |
+| Read LB (reads via pool)  | `pgbouncer-read`                       |                6432 | `localhost:6433` |
+| HAProxy (replicas, L4)    | `haproxy-read`                         |                5432 | `localhost:5440` |
+| Primary (direct)          | `postgres-primary`                     |                5432 | `localhost:5432` |
 
 **In-container DSNs (what your services should use):**
 - **WRITE_DSN**: `db_user:db_password@pgbouncer-write:6432/resilient_payment_processor?sslmode=disable`

@@ -1,36 +1,39 @@
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
-    container_name: zookeeper
-    restart: unless-stopped
-    ports:
-      - "2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    volumes:
-      - zookeeper-data:/var/lib/zookeeper/data
-      - zookeeper-data:/var/lib/zookeeper/log
-      - zookeeper-secrets:/etc/zookeeper/secrets
   kafka:
-    image: confluentinc/cp-kafka:7.6.1
+    image: confluentinc/cp-kafka:8.1.0
     container_name: kafka
     restart: unless-stopped
     ports:
-      - "9092:9092" # host access
-      - "29092:29092"      # optional: expose internal listener for debugging
-    depends_on:
-      - zookeeper
+      - "9092:9092"   # host access
+      - "29092:29092" # internal/debug
     environment:
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      # --- KRaft essentials (single node, combined broker+controller) ---
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+
+      # Listeners (broker + controller + host)
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+      # Single-node
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+
+      # Cluster ID (generate once and keep stable for this data dir)
+      # Generate with: docker run --rm confluentinc/cp-kafka:8.1.0 bash -lc "/bin/kafka-storage random-uuid"
+      CLUSTER_ID: "wwzzneZZTnC4sIfebR08Yw"  # replace with your generated UUID
+
     volumes:
       - kafka-data:/var/lib/kafka/data
       - kafka-secrets:/etc/kafka/secrets
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -190,6 +193,7 @@ services:
       replicas: 1
     environment:
       GIN_MODE: "release"
+      APP_METRICS_ADDR: ":2112"
       APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
       APP_KAFKA_BROKERS: "kafka:29092" # For local development only
       APP_KAFKA_ORDER_TOPIC: "orders-placed"
@@ -209,9 +213,12 @@ services:
       APP_RETRY_BASE_BACKOFF: "30s"
       APP_MAX_RETRY_BACKOFF: "5m"
       APP_MAX_RETRY_COUNT: "3"
-      APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "20"
-      APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "20"
+      APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "1000"
+      APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "1000"
       APP_FRAUD_ML_SERVICE_ADDR: "http://fraud-ml-service:8082"
+      APP_ML_RATE_LIMIT_PER_SEC: "1000"
+      APP_ML_REQUEST_BURST: "60"
+      APP_ML_REQUEST_MAX_THROTTLE_WAIT: "1s"
     depends_on:
       - kafka
       - pgbouncer-write
@@ -220,6 +227,7 @@ services:
     labels: {
       logging: "promtail"
     }
+
   fraud-ml-service:
     image: fraud-ml-service:latest
     build:
@@ -240,7 +248,7 @@ services:
     }
 
   prometheus:
-    image: prom/prometheus:v3.6.0
+    image: prom/prometheus:v3.7.2
     container_name: prometheus
     restart: unless-stopped
     ports:
@@ -260,12 +268,13 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana  # Persistence
       - ./configs/grafana/provisioning:/etc/grafana/provisioning  # data sources
+      - ./configs/grafana/provisioning/dashboards:/var/lib/grafana/dashboards
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin  # For local development only
     depends_on:
       - prometheus
   redis:
-    image: redis:7.2-alpine
+    image: redis:8.2.2
     container_name: redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -276,7 +285,7 @@ services:
       - redis-data:/data
 
   loki:
-    image: grafana/loki:3.3.2
+    image: grafana/loki:3.5
     container_name: loki
     restart: unless-stopped
     volumes:
@@ -285,7 +294,7 @@ services:
       - "3100:3100"
 
   promtail:
-    image: grafana/promtail:3.3.2
+    image: grafana/promtail:3.5
     container_name: promtail
     restart: unless-stopped
     volumes:

@@ -1,5 +1,6 @@
 # Configuration for Payment Worker
 # For local development only
+METRICS_ADDR: "localhost:8080"
 AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU=" # For local development only
 KAFKA_BROKERS: "localhost:9092" # For local development only
 KAFKA_ORDER_TOPIC: "orders-placed"
@@ -22,3 +23,6 @@ MAX_RETRY_COUNT: "3"
 MAX_ORDERS_PLACED_CONCURRENT_JOBS: "20"
 MAX_ORDERS_RETRY_CONCURRENT_JOBS: "5"
 FRAUD_ML_SERVICE_ADDR: "http://localhost:8082"
+ML_RATE_LIMIT_PER_SEC: "30"
+ML_REQUEST_BURST: "60"
+ML_REQUEST_MAX_THROTTLE_WAIT: "1s"

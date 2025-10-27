@@ -1,0 +1,30 @@
+image:
+  repository: provectuslabs/kafka-ui
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+env:
+  clusterName: local
+  bootstrapServers: "kafka.infra.svc.cluster.local:29092"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: traefik
+  host: "kafka-ui.localtest.me"
+  path: /

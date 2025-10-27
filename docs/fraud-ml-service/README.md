@@ -45,10 +45,13 @@ Artifacts
 ## File layout
 
 ```filetree
-/ai
-├─ train_fraud_detector_onnx.py   # offline training → ONNX export
-├─ app.py                         # Flask + ONNX Runtime inference server
-├─ requirements.txt               # pinned runtime & training deps
-└─ ai_dataset.json                # sample training data (not committed in prod)
+/services/fraud-ml-service
+├─ app.py                             # Flask + ONNX Runtime inference server
+├─ requirements.txt                   # pinned runtime & training deps
+├─ docker-entrypoint.sh               # Docker entrypoint
+└─ train
+    ├─ train_fraud_detector_onnx.py   # offline training → ONNX export
+    ├─ ai_dataset.json                # sample training data (not committed in prod)
+    └─ fraud_model.onnx               # exported ONNX model
 ```
 

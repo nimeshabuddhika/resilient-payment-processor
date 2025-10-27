@@ -56,22 +56,10 @@
             "uid": "P8F7BD5764BAA734F"
           },
           "direction": "backward",
-          "editorMode": "builder",
-          "expr": "{service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_commited_successfully`",
+          "editorMode": "code",
+          "expr": "{service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `payment_processed_successfully`",
           "queryType": "range",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "P8F7BD5764BAA734F"
-          },
-          "direction": "backward",
-          "editorMode": "builder",
-          "expr": "{service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `released_order_semaphore`",
-          "hide": false,
-          "queryType": "range",
-          "refId": "B"
         }
       ],
       "title": "Payment-worker logs",
@@ -434,12 +422,12 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Payment worker",
+  "title": "Payment Worker - Loki",
   "uid": "addgs4b",
-  "version": 1
+  "version": 5
 }
