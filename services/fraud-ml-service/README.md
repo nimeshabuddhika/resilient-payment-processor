@@ -56,4 +56,3 @@ Predict: `curl -X POST http://localhost:8082/api/v1/fraud-ml/predict -H "Content
 
 ## Limitations and Future Enhancements
 * Current: Offline training; no online learning.
-* Future: Add gRPC for lower latency, integrate Torch for advanced models, or embed in Go if bindings

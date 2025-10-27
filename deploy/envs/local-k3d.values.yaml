@@ -1,0 +1,24 @@
+# Apply to infra-kafka
+infra-kafka:
+  nodeSelector:
+    rpp: infra
+  persistence:
+    storageClass: "local-path"
+  service:
+    external:
+      enabled: true
+      nodePort: 30092
+  advertised:
+    internal: "kafka.infra.svc.cluster.local:29092"
+    external: "host.k3d.internal:30092"  # tools on your laptop use localhost:30092
+
+# Apply to infra-kafka-ui
+infra-kafka-ui:
+  nodeSelector:
+    rpp: infra
+  env:
+    bootstrapServers: "kafka.infra.svc.cluster.local:29092"
+  ingress:
+    enabled: true
+    className: traefik
+    host: "kafka-ui.localtest.me"

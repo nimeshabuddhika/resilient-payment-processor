@@ -1,0 +1,6 @@
+apiVersion: v2
+name: infra-kafka
+description: Single-node Kafka (KRaft) for local/dev clusters
+type: application
+version: 0.1.0
+appVersion: "8.1.0"
