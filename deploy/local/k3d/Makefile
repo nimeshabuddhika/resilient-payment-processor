@@ -88,8 +88,7 @@ infra-init: ## Create fundamental infrastructures
 .PHONY : init-kafka
 init-kafka: ## Provision kafka
 	@echo "Install Kafka"
-	helm upgrade --install infra-kafka $(ROOT)/charts/infra-kafka -n infra \
-      -f $(ROOT)/deploy/envs/local-k3d.values.yaml
+	helm upgrade --install infra-kafka-stack $(ROOT)charts/infra-kafka-stack -n infra
 
     # Wait and check the external NodePort
 	kubectl -n infra get svc
@@ -97,4 +96,4 @@ init-kafka: ## Provision kafka
 .PHONY : uninstall-kafka
 uninstall-kafka: ## Uninstall kafka
 	helm list -n infra
-	helm uninstall infra-kafka -n infra
+	helm uninstall infra-kafka-stack -n infra

@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels: { app: kafka }
+spec:
+  serviceName: kafka-headless
+  replicas: {{ .Values.kafka.replicas }}
+  selector:
+    matchLabels: { app: kafka }
+  template:
+    metadata:
+      labels: { app: kafka }
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      nodeSelector: {{- toYaml .Values.kafka.nodeSelector | nindent 8 }}
+      enableServiceLinks: false # prevents k8s from adding KAFKA_PORT
+      containers:
+        - name: broker
+          image: {{ .Values.kafka.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: internal,   containerPort: 29092 }
+            - { name: controller, containerPort: 29093 }
+            - { name: external,   containerPort: 9092 }
+          env:
+            # ---- KRaft essentials (single node, combined broker+controller) ----
+            - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
+            - { name: KAFKA_NODE_ID, value: "1" }
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@kafka-0.kafka-headless.{{ .Values.namespace }}.svc.cluster.local:29093"
+            - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER" }
+
+            # Listeners (bind to all interfaces; advertise per DNS/host)
+            - { name: KAFKA_LISTENERS, value: "PLAINTEXT://:29092,CONTROLLER://:29093,PLAINTEXT_HOST://:9092" }
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka-0.kafka-headless.{{ .Values.namespace }}.svc.cluster.local:29092,PLAINTEXT_HOST://{{ .Values.kafka.external.advertisedHost }}:{{ if .Values.kafka.external.enabled }}{{ .Values.kafka.external.nodePort }}{{ else }}9092{{ end }}"
+            - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT" }
+            - { name: KAFKA_INTER_BROKER_LISTENER_NAME, value: "PLAINTEXT" }
+
+            # Single-node config
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "{{ .Values.kafka.config.OFFSETS_TOPIC_REPLICATION_FACTOR }}"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "{{ .Values.kafka.config.TRANSACTION_STATE_LOG_REPLICATION_FACTOR }}"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "{{ .Values.kafka.config.TRANSACTION_STATE_LOG_MIN_ISR }}"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "{{ .Values.kafka.config.GROUP_INITIAL_REBALANCE_DELAY_MS }}"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "{{ .Values.kafka.config.AUTO_CREATE_TOPICS_ENABLE }}"
+
+            # Cluster ID (cp-kafka will format storage if not formatted)
+            - name: CLUSTER_ID
+              value: "{{ .Values.kafka.clusterId }}"
+
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+            # present for parity with docker-compose (not used unless TLS)
+            - name: secrets
+              mountPath: /etc/kafka/secrets
+
+          readinessProbe:
+            tcpSocket: { port: 29092 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 29092 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+
+          resources:
+            {{- toYaml .Values.kafka.resources | nindent 12 }}
+
+      volumes:
+        - name: secrets
+          emptyDir: {}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.kafka.storage.storageClassName }}
+        storageClassName: "{{ .Values.kafka.storage.storageClassName }}"
+        {{- end }}
+        resources:
+          requests:
+            storage: "{{ .Values.kafka.storage.size }}"

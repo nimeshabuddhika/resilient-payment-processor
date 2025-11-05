@@ -313,7 +313,5 @@ volumes:
   grafana-data:
   kafka-data:
   kafka-secrets:
-  zookeeper-data:
-  zookeeper-secrets:
   redis-data:
   loki-data:
