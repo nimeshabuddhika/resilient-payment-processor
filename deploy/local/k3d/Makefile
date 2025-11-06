@@ -77,7 +77,7 @@ images: builder ## Build and push services images to registry
 ##@ Infrastructure Management
 
 .PHONY : init-infra
-infra-init: ## Create fundamental infrastructures
+init-infra: ## Create fundamental infrastructures
 	kubectl create ns infra
 
 	@echo "Assigning labels"

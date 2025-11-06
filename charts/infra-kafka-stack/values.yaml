@@ -28,8 +28,13 @@ kafkaUi:
   image: provectuslabs/kafka-ui:latest
   nodeSelector: { rpp: infra }
   service:
-    type: NodePort
-    nodePort: 31880   # maps 8080 -> 31880 on your host
+    type: ClusterIP
+  ingress:
+    enabled: true
+    className: "traefik"                # k3s default
+    host: "kafka-ui.localtest.me"       # works without /etc/hosts (resolves to 127.0.0.1)
+    path: "/"
+    tls:
+      enabled: false                    # tls configuration
+      secretName: "kafka-ui-tls"
   resources: {}
-
-podAnnotations: {}
