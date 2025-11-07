@@ -79,6 +79,8 @@ images: builder ## Build and push services images to registry
 .PHONY : init-infra
 init-infra: ## Create fundamental infrastructures
 	kubectl create ns infra
+	kubectl create ns db
+	kubectl create ns apps
 
 	@echo "Assigning labels"
 	kubectl label node k3d-rpp-agent-0 rpp=infra --overwrite #kafka, kafka-ui, prometheus, grafana, loki, promtail
@@ -91,9 +93,18 @@ init-kafka: ## Provision kafka
 	helm upgrade --install infra-kafka-stack $(ROOT)charts/infra-kafka-stack -n infra
 
     # Wait and check the external NodePort
-	kubectl -n infra get svc
+	kubectl -n infra get po -o wide
 
 .PHONY : uninstall-kafka
 uninstall-kafka: ## Uninstall kafka
 	helm list -n infra
 	helm uninstall infra-kafka-stack -n infra
+
+
+.PHONY : init-db
+init-db: ## Provision Postgres Database
+	@echo "Install Postgres"
+	helm upgrade --install db-stack $(ROOT)charts/db-stack -n db
+
+    # Wait and check the external NodePort
+	kubectl -n db get po -o wide

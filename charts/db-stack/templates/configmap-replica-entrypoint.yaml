@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: replica-entrypoint
+data:
+  replica-entrypoint.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    : "${PRIMARY_HOST:=postgres-primary}"
+    : "${PRIMARY_PORT:=5432}"
+    : "${REPL_USER:?missing}"
+    : "${REPL_PASSWORD:?missing}"
+
+    if [ ! -s "$PGDATA/PG_VERSION" ]; then
+      echo "Base backup from ${PRIMARY_HOST}:${PRIMARY_PORT}..."
+      export PGPASSWORD="$REPL_PASSWORD"
+      pg_basebackup -h "$PRIMARY_HOST" -p "$PRIMARY_PORT" -D "$PGDATA" -U "$REPL_USER" -v -P -R
+      # Ensure slot and application_name
+      echo "primary_conninfo = 'host=${PRIMARY_HOST} port=${PRIMARY_PORT} user=${REPL_USER} password=${REPL_PASSWORD} application_name=${HOSTNAME}'" >> "$PGDATA/postgresql.auto.conf"
+      echo "primary_slot_name = '${REPL_SLOT}'" >> "$PGDATA/postgresql.auto.conf"
+      chmod 600 "$PGDATA/postgresql.auto.conf"
+    fi
+
+    exec docker-entrypoint.sh postgres

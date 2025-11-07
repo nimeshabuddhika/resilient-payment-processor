@@ -1,0 +1,54 @@
+{{- range $i, $rep := .Values.postgres.replicas }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-{{ $rep.name }}
+spec:
+  serviceName: postgres-{{ $rep.name }}
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres-{{ $rep.name }} }
+  template:
+    metadata:
+      labels: { app: postgres-{{ $rep.name }} }
+    spec:
+      nodeSelector: {{- toYaml $.Values.nodeSelector | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ $.Values.images.postgres }}
+          envFrom:
+            - secretRef: { name: postgres-credentials }
+          env:
+            - name: PRIMARY_HOST
+              value: postgres-primary
+            - name: PRIMARY_PORT
+              value: "5432"
+            - name: REPL_SLOT
+              value: {{ $rep.slot | quote }}
+          command: ["bash","/usr/local/bin/replica-entrypoint.sh"]
+          ports: [{ name: pg, containerPort: 5432 }]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: replica-entrypoint, mountPath: /usr/local/bin/replica-entrypoint.sh, subPath: replica-entrypoint.sh }
+          readinessProbe:
+            exec: { command: {{ tpl (toJson $.Values.probes.pgReadyCmd) $ }} }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 5432 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources: {{- toYaml ($rep.resources | default dict) | nindent 12 }}
+      volumes:
+        - name: replica-entrypoint
+          configMap:
+            name: replica-entrypoint
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ $.Values.storage.className | default nil | quote }}
+        resources: { requests: { storage: {{ $.Values.storage.replicaSize | quote }} } }
+---
+{{- end }}

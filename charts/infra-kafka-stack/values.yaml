@@ -3,7 +3,8 @@ namespace: infra
 kafka:
   image: confluentinc/cp-kafka:8.1.0
   replicas: 1
-  nodeSelector: { rpp: infra }
+  nodeSelector:
+    rpp: infra
   resources: {}
   storage:
     size: 10Gi
@@ -26,13 +27,14 @@ kafka:
 
 kafkaUi:
   image: provectuslabs/kafka-ui:latest
-  nodeSelector: { rpp: infra }
+  nodeSelector:
+    rpp: infra
   service:
     type: ClusterIP
   ingress:
     enabled: true
     className: "traefik"                # k3s default
-    host: "kafka-ui.localtest.me"       # works without /etc/hosts (resolves to 127.0.0.1)
+    host: "kafka-ui.localtest.me"
     path: "/"
     tls:
       enabled: false                    # tls configuration

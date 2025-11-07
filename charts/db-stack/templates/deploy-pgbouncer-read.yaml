@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer-read
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: pgbouncer-read } }
+  template:
+    metadata: { labels: { app: pgbouncer-read } }
+    spec:
+      nodeSelector: {{- toYaml .Values.nodeSelector | indent 6 }}
+      containers:
+        - name: pgbouncer
+          image: {{ .Values.images.pgbouncer }}
+          args: ["pgbouncer","/etc/pgbouncer/pgbouncer.ini"]
+          ports: [{ name: pgb, containerPort: 6432 }]
+          volumeMounts:
+            - { name: ini, mountPath: /etc/pgbouncer/pgbouncer.ini, subPath: pgbouncer.ini }
+            - { name: users, mountPath: /etc/pgbouncer/userlist.txt, subPath: userlist.txt, readOnly: true }
+          readinessProbe: { tcpSocket: { port: 6432 }, initialDelaySeconds: 5 }
+          livenessProbe:  { tcpSocket: { port: 6432 }, initialDelaySeconds: 10 }
+          resources: {{- toYaml .Values.pgbouncer.read.resources | nindent 12 }}
+      volumes:
+        - name: ini
+          configMap: { name: pgbouncer-read }
+        - name: users
+          secret: { secretName: pgbouncer-userlist }

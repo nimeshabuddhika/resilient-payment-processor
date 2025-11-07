@@ -3,4 +3,4 @@ name: infra-kafka-stack
 description: Single-node Kafka (KRaft) + Kafka UI for local/dev clusters
 type: application
 version: 0.1.0
-appVersion: "8.1.0"
+appVersion: "v0.0.1"

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-read
+data:
+  pgbouncer.ini: |
+{{ tpl .Values.pgbouncer.read.ini . | indent 4 }}

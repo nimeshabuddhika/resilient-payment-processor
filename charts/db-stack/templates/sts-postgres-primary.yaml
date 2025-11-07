@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-primary
+spec:
+  serviceName: postgres-primary
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres-primary }
+  template:
+    metadata:
+      labels: { app: postgres-primary }
+    spec:
+      nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres }}
+          envFrom:
+            - secretRef: { name: postgres-credentials }
+          ports: [{ name: pg, containerPort: 5432 }]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: init-sql, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+          readinessProbe:
+            exec: { command: {{ tpl (toJson .Values.probes.pgReadyCmd) . }} }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 5432 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources: {{- toYaml .Values.postgres.primary.resources | nindent 12 }}
+      volumes:
+        - name: init-sql
+          secret: { secretName: postgres-init-sql }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.storage.className | default nil | quote }}
+        resources: { requests: { storage: {{ .Values.storage.primarySize | quote }} } }
