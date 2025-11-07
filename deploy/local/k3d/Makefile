@@ -108,3 +108,8 @@ init-db: ## Provision Postgres Database
 
     # Wait and check the external NodePort
 	kubectl -n db get po -o wide
+
+.PHONY : uninstall-db
+uninstall-db: ## Uninstall kafka
+	helm list -n db
+	helm uninstall db-stack -n db

@@ -34,8 +34,6 @@ postgres:
     resources: {}
     extraEnv:
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust"
-    # Optional: pass custom *.sql/*.sh via values.files to /docker-entrypoint-initdb.d
-    additionalInitFiles: []  # each item: { name: "filename.sql", content: |-"SQL here" }
   replicas:
     - name: replica-1
       slot: slot_replica_1

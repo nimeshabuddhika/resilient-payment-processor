@@ -4,11 +4,13 @@ metadata:
   name: pgbouncer-read
 spec:
   replicas: 1
-  selector: { matchLabels: { app: pgbouncer-read } }
+  selector:
+    matchLabels: { app: pgbouncer-read }
   template:
-    metadata: { labels: { app: pgbouncer-read } }
+    metadata:
+      labels: { app: pgbouncer-read }
     spec:
-      nodeSelector: {{- toYaml .Values.nodeSelector | indent 6 }}
+      nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}
       containers:
         - name: pgbouncer
           image: {{ .Values.images.pgbouncer }}
