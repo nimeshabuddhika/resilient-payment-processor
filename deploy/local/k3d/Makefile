@@ -76,8 +76,8 @@ images: builder ## Build and push services images to registry
 
 ##@ Infrastructure Management
 
-.PHONY : init-infra
-init-infra: ## Create fundamental infrastructures
+.PHONY : init-nodes
+init-nodes: ## Create fundamental infrastructures
 	kubectl create ns infra
 	kubectl create ns db
 	kubectl create ns apps
@@ -87,18 +87,22 @@ init-infra: ## Create fundamental infrastructures
 	kubectl label node k3d-rpp-agent-1 rpp=db --overwrite # postgres-primary, postgres-replica-[1..2], haproxy-read, pgbouncer-*
 	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service, redis
 
-.PHONY : init-kafka
-init-kafka: ## Provision kafka
+.PHONY : init-infra
+init-infra: ## Provision kafka, redis
 	@echo "Install Kafka"
 	helm upgrade --install infra-kafka-stack $(ROOT)charts/infra-kafka-stack -n infra
+
+	@echo "Install redis"
+	helm upgrade --install infra-redis $(ROOT)charts/infra-redis -n infra
 
     # Wait and check the external NodePort
 	kubectl -n infra get po -o wide
 
-.PHONY : uninstall-kafka
-uninstall-kafka: ## Uninstall kafka
+.PHONY : uninstall-infra
+uninstall-infra: ## Uninstall kafka, redis
 	helm list -n infra
 	helm uninstall infra-kafka-stack -n infra
+	helm uninstall infra-redis -n infra
 
 
 .PHONY : init-db
