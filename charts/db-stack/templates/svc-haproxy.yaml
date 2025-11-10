@@ -9,6 +9,3 @@ spec:
     - name: pg
       port: 5432
       targetPort: 5432
-      {{- if .Values.nodePorts.haproxy }}
-      nodePort: {{ .Values.nodePorts.haproxy }}
-      {{- end }}

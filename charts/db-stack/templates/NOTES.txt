@@ -1,6 +1,0 @@
-Primary (write):     postgres-primary:5432 (NodePort: {{ .Values.nodePorts.postgresPrimary | default "auto" }})
-Read LB (HAProxy):   haproxy-read:5432     (NodePort: {{ .Values.nodePorts.haproxy | default "auto" }})
-PgBouncer (write):   pgbouncer-write:6432  (NodePort: {{ .Values.nodePorts.pgbouncerWrite | default "auto" }})
-PgBouncer (read):    pgbouncer-read:6432   (NodePort: {{ .Values.nodePorts.pgbouncerRead | default "auto" }})
-
-psql -h 127.0.0.1 -p <nodePort> -U {{ .Values.postgres.appUser }} -d {{ .Values.postgres.dbName }}

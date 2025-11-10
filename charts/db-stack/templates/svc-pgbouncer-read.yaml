@@ -9,6 +9,3 @@ spec:
     - name: pgb
       port: 6432
       targetPort: 6432
-      {{- if .Values.nodePorts.pgbouncerRead }}
-      nodePort: {{ .Values.nodePorts.pgbouncerRead }}
-      {{- end }}
