@@ -3,11 +3,11 @@ kind: Service
 metadata:
   name: {{ .Values.orderApi.service.name }}
   labels:
-    app: order-api
+    app: {{.Values.orderApi.app.name}}
 spec:
   type: ClusterIP
   selector:
-    app: order-api
+    app: {{.Values.orderApi.app.name}}
   ports:
     - name: http
       port: {{ .Values.orderApi.port }}

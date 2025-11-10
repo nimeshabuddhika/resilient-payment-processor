@@ -18,6 +18,8 @@ orderApi:
     name: "order-api-secret"
   app:
     name: "order-api"
+  service:
+    name: "order-api-svc"
   env:
     GIN_MODE: "debug"
     APP_PORT: "8081"
@@ -30,8 +32,6 @@ orderApi:
     APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU="
     APP_PRIMARY_DB_ADDR: "db_user:db_password@pgbouncer-write.db.svc.cluster.local:6432/resilient_payment_processor?sslmode=disable"
     APP_READ_DB_ADDR: "db_user:db_password@pgbouncer-read.db.svc.cluster.local:6432/resilient_payment_processor?sslmode=disable"
-  service:
-    name: "order-api-svc"
   ingress:
     name: "order-api-ingress"
     enabled: true
@@ -95,7 +95,22 @@ fraudMlService:
   port: 8082
   labels:
     logging: "promtail"
+  app:
+    name: "fraud-ml-service"
+  configmap:
+    name: "fraud-ml-service-config"
+  service:
+    name: "fraud-ml-svc"
   env:
     MODEL_PATH: "/app/train/fraud_model.onnx"
     FRAUD_THRESHOLD: "0.5"
     PORT: "8082"
+  ingress:
+    name: "fraud-ml-service-ingress"
+    enabled: true
+    className: traefik
+    host: "fraud-ml-service.localtest.me"
+    path: "/"
+    tls:
+      enabled: false
+      secretName: "fraud-ml-service-tls"

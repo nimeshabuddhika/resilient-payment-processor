@@ -83,9 +83,9 @@ init-nodes: ## Create fundamental infrastructures
 	kubectl create ns apps
 
 	@echo "Assigning labels"
-	kubectl label node k3d-rpp-agent-0 rpp=infra --overwrite #kafka, kafka-ui, prometheus, grafana, loki, promtail
+	kubectl label node k3d-rpp-agent-0 rpp=infra --overwrite #kafka, kafka-ui, redis, prometheus, grafana, loki, promtail
 	kubectl label node k3d-rpp-agent-1 rpp=db --overwrite # postgres-primary, postgres-replica-[1..2], haproxy-read, pgbouncer-*
-	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service, redis
+	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
 
 .PHONY : init-infra
 init-infra: ## Provision kafka, redis
