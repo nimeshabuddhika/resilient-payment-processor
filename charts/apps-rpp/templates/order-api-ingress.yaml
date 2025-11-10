@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: order-api
+  name: {{.Values.orderApi.ingress.name}}
 spec:
   ingressClassName: {{ .Values.orderApi.ingress.className }}
   {{- if .Values.orderApi.ingress.tls.enabled }}

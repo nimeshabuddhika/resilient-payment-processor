@@ -12,6 +12,12 @@ orderApi:
   port: 8081
   labels:
     logging: "promtail"
+  configmap:
+    name: "order-api-config"
+  secretConfig:
+    name: "order-api-secret"
+  app:
+    name: "order-api"
   env:
     GIN_MODE: "debug"
     APP_PORT: "8081"
@@ -27,6 +33,7 @@ orderApi:
   service:
     name: "order-api-svc"
   ingress:
+    name: "order-api-ingress"
     enabled: true
     className: traefik
     host: "order-api.localtest.me"
@@ -37,13 +44,19 @@ orderApi:
 
 paymentWorker:
   replicas: 1
-  image: "payment-worker:latest"
+  image: "rpp-registry:5000/payment-worker:dev"
   labels:
     logging: "promtail"
+  configmap:
+    name: "payment-worker-config"
+  secretConfig:
+    name: "payment-worker-secret"
+  app:
+    name: "payment-worker"
   env:
     GIN_MODE: "release"
     APP_METRICS_ADDR: ":2112"
-    APP_KAFKA_BROKERS: "kafka:29092"
+    APP_KAFKA_BROKERS: "kafka.infra.svc.cluster.local:29092"
     APP_KAFKA_ORDER_TOPIC: "orders-placed"
     APP_KAFKA_DLQ_TOPIC: "orders-placed-dlq"
     APP_KAFKA_DLQ_RETENTION: "48h"
@@ -55,7 +68,7 @@ paymentWorker:
     APP_KAFKA_RETRY_CONSUMER_GROUP: "payment-retry-workers"
     APP_MAX_DB_CONNECTIONS: "50"
     APP_MIN_DB_CONNECTIONS: "5"
-    APP_REDIS_ADDR: "redis:6379"
+    APP_REDIS_ADDR: "redis.infra.svc.cluster.local:6379"
     APP_RETRY_BASE_BACKOFF: "30s"
     APP_MAX_RETRY_BACKOFF: "5m"
     APP_MAX_RETRY_COUNT: "3"
@@ -67,17 +80,18 @@ paymentWorker:
     APP_ML_REQUEST_MAX_THROTTLE_WAIT: "1s"
   secrets:
     APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU="
-    APP_PRIMARY_DB_ADDR: "db_user:db_password@pgbouncer-write:6432/resilient_payment_processor?sslmode=disable"
-    APP_READ_DB_ADDR: "db_user:db_password@pgbouncer-read:6432/resilient_payment_processor?sslmode=disable"
+    APP_PRIMARY_DB_ADDR: "db_user:db_password@pgbouncer-write.db.svc.cluster.local:6432/resilient_payment_processor?sslmode=disable"
+    APP_READ_DB_ADDR: "db_user:db_password@pgbouncer-read.db.svc.cluster.local:6432/resilient_payment_processor?sslmode=disable"
   # Prometheus annotation scrape via service
   metrics:
     enabled: true
+    name: "payment-worker-metrics"
     port: 2112
     path: /metrics
 
 fraudMlService:
   replicas: 1
-  image: "fraud-ml-service:latest"
+  image: "rpp-registry:5000/fraud-ml-service:dev"
   port: 8082
   labels:
     logging: "promtail"
