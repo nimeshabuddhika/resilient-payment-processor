@@ -1,0 +1,87 @@
+nodeSelector:
+  rpp: apps
+
+imagePullPolicy: Always
+imagePullSecrets: []  # e.g., [{ name: "rpp-registry" }]
+
+resources: {}  # set per container e.g. (limits/requests)
+
+orderApi:
+  replicas: 1
+  image: "rpp-registry:5000/order-api:dev"
+  port: 8081
+  labels:
+    logging: "promtail"
+  env:
+    GIN_MODE: "debug"
+    APP_PORT: "8081"
+    APP_KAFKA_BROKERS: "kafka.infra.svc.cluster.local:29092"
+    APP_KAFKA_ORDER_TOPIC: "orders-placed"
+    APP_KAFKA_ORDER_RETENTION: "24h"
+    APP_MAX_DB_CONNECTIONS: "50"
+    APP_MIN_DB_CONNECTIONS: "5"
+  secrets:
+    APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU="
+    APP_PRIMARY_DB_ADDR: "db_user:db_password@pgbouncer-write.db.svc.cluster.local:6432/resilient_payment_processor?sslmode=disable"
+    APP_READ_DB_ADDR: "db_user:db_password@pgbouncer-read.db.svc.cluster.local:6432/resilient_payment_processor?sslmode=disable"
+  service:
+    name: "order-api-svc"
+  ingress:
+    enabled: true
+    className: traefik
+    host: "order-api.localtest.me"
+    path: "/"
+    tls:
+      enabled: false
+      secretName: "order-api-tls"
+
+paymentWorker:
+  replicas: 1
+  image: "payment-worker:latest"
+  labels:
+    logging: "promtail"
+  env:
+    GIN_MODE: "release"
+    APP_METRICS_ADDR: ":2112"
+    APP_KAFKA_BROKERS: "kafka:29092"
+    APP_KAFKA_ORDER_TOPIC: "orders-placed"
+    APP_KAFKA_DLQ_TOPIC: "orders-placed-dlq"
+    APP_KAFKA_DLQ_RETENTION: "48h"
+    APP_KAFKA_RETRY_TOPIC: "orders-retry"
+    APP_KAFKA_RETRY_RETENTION: "48h"
+    APP_KAFKA_RETRY_DLQ_TOPIC: "orders-retry-dlq"
+    APP_KAFKA_RETRY_DLQ_RETENTION: "168h"
+    APP_KAFKA_ORDER_CONSUMER_GROUP: "payment-order-workers"
+    APP_KAFKA_RETRY_CONSUMER_GROUP: "payment-retry-workers"
+    APP_MAX_DB_CONNECTIONS: "50"
+    APP_MIN_DB_CONNECTIONS: "5"
+    APP_REDIS_ADDR: "redis:6379"
+    APP_RETRY_BASE_BACKOFF: "30s"
+    APP_MAX_RETRY_BACKOFF: "5m"
+    APP_MAX_RETRY_COUNT: "3"
+    APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "1000"
+    APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "1000"
+    APP_FRAUD_ML_SERVICE_ADDR: "http://fraud-ml-service:8082"
+    APP_ML_RATE_LIMIT_PER_SEC: "1000"
+    APP_ML_REQUEST_BURST: "60"
+    APP_ML_REQUEST_MAX_THROTTLE_WAIT: "1s"
+  secrets:
+    APP_AES_KEY: "Zk6IWX04Qm7ThZ5dJi8Xo4zyb8g9wfcxr5jxa1i3JKU="
+    APP_PRIMARY_DB_ADDR: "db_user:db_password@pgbouncer-write:6432/resilient_payment_processor?sslmode=disable"
+    APP_READ_DB_ADDR: "db_user:db_password@pgbouncer-read:6432/resilient_payment_processor?sslmode=disable"
+  # Prometheus annotation scrape via service
+  metrics:
+    enabled: true
+    port: 2112
+    path: /metrics
+
+fraudMlService:
+  replicas: 1
+  image: "fraud-ml-service:latest"
+  port: 8082
+  labels:
+    logging: "promtail"
+  env:
+    MODEL_PATH: "/app/train/fraud_model.onnx"
+    FRAUD_THRESHOLD: "0.5"
+    PORT: "8082"

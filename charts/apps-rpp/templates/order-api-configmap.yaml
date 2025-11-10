@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-api-config
+data:
+{{- range $k, $v := .Values.orderApi.env }}
+  {{ $k }}: "{{ $v }}"
+{{- end }}

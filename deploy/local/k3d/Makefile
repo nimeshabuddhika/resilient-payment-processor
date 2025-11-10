@@ -117,3 +117,16 @@ init-db: ## Provision Postgres Database
 uninstall-db: ## Uninstall kafka
 	helm list -n db
 	helm uninstall db-stack -n db
+
+.PHONY : init-apps
+init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)
+	@echo "Deploy order-api, payment-worker, fraud-ml-service"
+	helm upgrade --install apps-rpp $(ROOT)charts/apps-rpp -n apps
+
+    # Wait and check the external NodePort
+	kubectl -n apps get po -o wide
+
+.PHONY : uninstall-apps
+uninstall-apps: ## Uninstall apps (order-api, payment-worker, fraud-ml-service)
+	helm list -n apps
+	helm uninstall apps-rpp -n apps

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-api
+  labels:
+    app: order-api
+spec:
+  replicas: {{ .Values.orderApi.replicas }}
+  selector:
+    matchLabels: { app: order-api }
+  template:
+    metadata:
+      labels:
+        app: order-api
+        {{- range $k, $v := .Values.orderApi.labels }}
+        {{ $k }}: "{{ $v }}"
+        {{- end }}
+    spec:
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: order-api
+          image: {{ .Values.orderApi.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.orderApi.port }}
+          envFrom:
+            - configMapRef:
+                name: order-api-config
+            - secretRef:
+                name: order-api-secret
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.orderApi.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.orderApi.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{ toYaml .Values.resources | indent 12 }}

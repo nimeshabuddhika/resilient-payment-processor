@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.orderApi.service.name }}
+  labels:
+    app: order-api
+spec:
+  type: ClusterIP
+  selector:
+    app: order-api
+  ports:
+    - name: http
+      port: {{ .Values.orderApi.port }}
+      targetPort: {{ .Values.orderApi.port }}
