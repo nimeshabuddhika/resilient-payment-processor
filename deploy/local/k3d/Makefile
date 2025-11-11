@@ -117,6 +117,8 @@ init-db: ## Provision Postgres Database
 uninstall-db: ## Uninstall kafka
 	helm list -n db
 	helm uninstall db-stack -n db
+	@echo "Delete Postgres Persistence volumes (PVC)"
+	kubectl -n db delete pvc data-postgres-primary-0 data-postgres-replica-1-0 data-postgres-replica-2-0
 
 .PHONY : init-apps
 init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)

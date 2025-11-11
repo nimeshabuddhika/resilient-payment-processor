@@ -1,0 +1,6 @@
+apiVersion: v2
+name: observability
+description: Prometheus + Grafana + Loki + Promtail (single-namespace, lightweight)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

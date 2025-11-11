@@ -1,0 +1,144 @@
+namespace: infra
+
+nodeSelector:
+  rpp: infra
+
+storageClassName: ""   # empty -> default storage class (e.g., local-path on k3d)
+persistence:
+  size:
+    prometheus: 10Gi
+    grafana: 5Gi
+    loki: 10Gi
+
+prometheus:
+  image: prom/prometheus:v3.7.2
+  service:
+    type: NodePort         # Change to ClusterIP if you’ll use ingress
+    nodePort: 30900
+  resources: {}
+  config: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      # Scrape order-api
+      - job_name: order-api
+      static_configs:
+      - targets: [ 'order-api:8081' ]  # Internal service, add labels for multi-replica
+      metrics_path: /metrics
+    
+      # Scrape payment-worker
+      - job_name: payment-worker
+        scrape_interval: 5s
+        static_configs:
+          - targets:
+              - payment-worker:2112
+    
+      # Scrape fraud-ml-service
+      - job_name: 'fraud-ml-service'
+        scrape_interval: 15s
+        scrape_timeout: 10s
+        metrics_path: /metrics
+        static_configs:
+          - targets: [ 'fraud-ml-service:8082' ]
+
+grafana:
+  image: grafana/grafana:12.2
+  admin:
+    username: admin
+    password: admin   # local/dev only
+  service:
+    type: NodePort
+    nodePort: 30300
+  resources: {}
+
+  # Provision a Prometheus datasource that points at this chart’s Prometheus service
+  datasource: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        jsonData:
+          timeInterval: 15s
+
+  # Optional: drop any JSON dashboards here (key -> filename, value -> JSON)
+  dashboards: {}
+  # Example:
+  # dashboards:
+  #   rpp-overview.json: |
+  #     { "annotations": {...}, "panels": [...], "title": "RPP Overview", "uid": "rpp-overview", "version": 1 }
+
+loki:
+  image: grafana/loki:3.5.0
+  service:
+    type: ClusterIP
+  resources: {}
+  config: |
+    server:
+      http_listen_port: 3100
+    common:
+      path_prefix: /loki
+      compactor_address: http://loki:3100
+    storage:
+      filesystem:
+        chunks_directory: /loki/chunks
+        rules_directory: /loki/rules
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    ruler:
+      storage:
+        type: local
+        local:
+          directory: /loki/rules
+    limits_config:
+      ingestion_burst_size_mb: 32
+      ingestion_rate_mb: 16
+
+promtail:
+  image: grafana/promtail:3.5.0
+  resources: {}
+  # Default K8s-discovery config for container logs -> Loki
+  config: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+    positions:
+      filename: /run/promtail/positions.yaml
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+    scrape_configs:
+      - job_name: kubernetes-pods
+        pipeline_stages:
+          - docker: {}
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_node_name]
+            target: __host__
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_container_name]
+            regex: .+
+          - action: replace
+            source_labels: [__meta_kubernetes_namespace]
+            target: namespace
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_name]
+            target: pod
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_container_name]
+            target: container
+          - action: replace
+            replacement: /var/log/pods/*/*/*.log
+            target: __path__
