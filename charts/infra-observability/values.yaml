@@ -45,32 +45,23 @@ prometheus:
 
 grafana:
   image: grafana/grafana:12.2
+  app:
+    name: "grafana"
   admin:
     username: admin
     password: admin   # local/dev only
   service:
-    type: NodePort
-    nodePort: 30300
-  resources: {}
-
-  # Provision a Prometheus datasource that points at this chart’s Prometheus service
-  datasource: |
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        type: prometheus
-        access: proxy
-        url: http://prometheus:9090
-        isDefault: true
-        jsonData:
-          timeInterval: 15s
-
-  # Optional: drop any JSON dashboards here (key -> filename, value -> JSON)
-  dashboards: {}
-  # Example:
-  # dashboards:
-  #   rpp-overview.json: |
-  #     { "annotations": {...}, "panels": [...], "title": "RPP Overview", "uid": "rpp-overview", "version": 1 }
+    name: "grafana-service"
+    port: 3000
+  ingress:
+    name: "grafana-ingress"
+    enabled: true
+    className: traefik
+    host: "grafana.localtest.me"
+    path: "/"
+    tls:
+      enabled: false
+      secretName: "grafana-tls"
 
 loki:
   image: grafana/loki:3.5.0

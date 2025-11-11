@@ -95,6 +95,9 @@ init-infra: ## Provision kafka, redis
 	@echo "Install redis"
 	helm upgrade --install infra-redis $(ROOT)charts/infra-redis -n infra
 
+	@echo "Install observability services"
+	helm upgrade --install infra-observability $(ROOT)charts/infra-observability -n infra
+
     # Wait and check the external NodePort
 	kubectl -n infra get po -o wide
 
@@ -103,6 +106,7 @@ uninstall-infra: ## Uninstall kafka, redis
 	helm list -n infra
 	helm uninstall infra-kafka-stack -n infra
 	helm uninstall infra-redis -n infra
+	helm uninstall infra-observability -n infra
 
 
 .PHONY : init-db
