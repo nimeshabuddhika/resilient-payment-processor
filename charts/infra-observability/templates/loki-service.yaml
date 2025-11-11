@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Values.loki.service.name}}
+spec:
+  selector:
+    app: {{.Values.loki.app.name}}
+  ports:
+    - name: http
+      port: {{ .Values.loki.port }}
+      targetPort: {{ .Values.loki.port }}
+  type: {{ .Values.loki.service.type }}

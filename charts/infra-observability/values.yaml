@@ -65,36 +65,14 @@ grafana:
 
 loki:
   image: grafana/loki:3.5.0
+  port: 3100
+  app:
+    name: "loki"
   service:
+    name: "loki-service"
     type: ClusterIP
-  resources: {}
-  config: |
-    server:
-      http_listen_port: 3100
-    common:
-      path_prefix: /loki
-      compactor_address: http://loki:3100
-    storage:
-      filesystem:
-        chunks_directory: /loki/chunks
-        rules_directory: /loki/rules
-    schema_config:
-      configs:
-        - from: 2024-01-01
-          store: tsdb
-          object_store: filesystem
-          schema: v13
-          index:
-            prefix: index_
-            period: 24h
-    ruler:
-      storage:
-        type: local
-        local:
-          directory: /loki/rules
-    limits_config:
-      ingestion_burst_size_mb: 32
-      ingestion_rate_mb: 16
+  pvc: # Persistent Volume Claim
+    name: "loki-data"
 
 promtail:
   image: grafana/promtail:3.5.0
