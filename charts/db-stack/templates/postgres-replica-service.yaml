@@ -1,0 +1,15 @@
+{{- range $i, $rep := .Values.postgres.replicas }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-{{ $rep.name }}
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres-{{ $rep.name }}
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+---
+{{- end }}

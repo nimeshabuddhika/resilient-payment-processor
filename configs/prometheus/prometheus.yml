@@ -4,7 +4,8 @@ global:
 scrape_configs:
   - job_name: order-api
     static_configs:
-      - targets: [ 'order-api:8081' ]  # Internal service, add labels for multi-replica
+      - targets:
+          - order-api:8081
     metrics_path: /metrics
   - job_name: payment-worker
     scrape_interval: 5s
@@ -16,4 +17,5 @@ scrape_configs:
     scrape_timeout: 10s
     metrics_path: /metrics
     static_configs:
-      - targets: [ 'fraud-ml-service:8082' ]
+      - targets:
+          - fraud-ml-service:8082

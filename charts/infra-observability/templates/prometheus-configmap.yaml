@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+
+    scrape_configs:
+      # All annotated pods in the apps namespace
+      - job_name: 'kubernetes-pods-annotated-apps'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [ 'apps' ]
+
+        relabel_configs:
+          # only pods that opt-in
+          - action: keep
+            source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
+            regex: true|True|TRUE
+
+          # path from annotation (if provided)
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_path ]
+            target_label: __metrics_path__
+            regex: (.+)
+
+          # port from annotation
+          - action: replace
+            source_labels: [ __address__, __meta_kubernetes_pod_annotation_prometheus_io_port ]
+            target_label: __address__
+            regex: (.+):\d+;(\d+)
+            replacement: $1:$2
+
+          # scheme from annotation (https support)
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scheme ]
+            target_label: __scheme__
+            regex: (https?)
+
+          # helpful labels
+          - action: replace
+            source_labels: [ __meta_kubernetes_namespace ]
+            target_label: namespace
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_name ]
+            target_label: pod
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_container_name ]
+            target_label: container
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_label_app ]
+            target_label: app
+
+          # drop noisy annotation meta-labels
+          - action: labeldrop
+            regex: __meta_kubernetes_pod_annotation_prometheus_.*
+
+      # Faster scrape for payment-worker replicas
+      - job_name: 'payment-worker-fast'
+        scrape_interval: 5s
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [ 'apps' ]
+        relabel_configs:
+          - action: keep
+            source_labels: [ __meta_kubernetes_pod_label_app ]
+            regex: payment-worker
+          - action: keep
+            source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
+            regex: true|True|TRUE
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_path ]
+            target_label: __metrics_path__
+            regex: (.+)
+          - action: replace
+            source_labels: [ __address__, __meta_kubernetes_pod_annotation_prometheus_io_port ]
+            target_label: __address__
+            regex: (.+):\d+;(\d+)
+            replacement: $1:$2
+          - action: replace
+            source_labels: [ __meta_kubernetes_namespace ]
+            target_label: namespace
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_name ]
+            target_label: pod
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_container_name ]
+            target_label: container
+          - action: replace
+            source_labels: [ __meta_kubernetes_pod_label_app ]
+            target_label: app

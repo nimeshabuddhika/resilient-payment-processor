@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.Values.orderApi.app.name}}
+  labels:
+    app: {{.Values.orderApi.app.name}}
+spec:
+  replicas: {{ .Values.orderApi.replicas }}
+  selector:
+    matchLabels:
+      app: {{.Values.orderApi.app.name}}
+  template:
+    metadata:
+      labels:
+        app: {{.Values.orderApi.app.name}}
+        {{- range $k, $v := .Values.orderApi.labels }}
+        {{ $k }}: "{{ $v }}"
+        {{- end }}
+      annotations:
+        prometheus.io/scrape: {{.Values.orderApi.metrics.enabled | quote}}
+        prometheus.io/port: {{ .Values.orderApi.port | quote }}
+        prometheus.io/path: {{.Values.orderApi.metrics.path}}
+        prometheus.io/scheme: {{.Values.orderApi.metrics.scheme}}
+    spec:
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: {{.Values.orderApi.app.name}}
+          image: {{ .Values.orderApi.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.orderApi.port }}
+          envFrom:
+            - configMapRef:
+                name: {{.Values.orderApi.configmap.name}}
+            - secretRef:
+                name: {{.Values.orderApi.secretConfig.name}}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.orderApi.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.orderApi.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{ toYaml .Values.resources | indent 12 }}

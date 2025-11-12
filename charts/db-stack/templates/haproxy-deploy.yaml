@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haproxy-read
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: haproxy-read } }
+  template:
+    metadata: { labels: { app: haproxy-read } }
+    spec:
+      nodeSelector: {{- toYaml .Values.nodeSelector | nindent 6 }}
+      containers:
+        - name: haproxy
+          image: {{ .Values.images.haproxy }}
+          args: ["-f","/usr/local/etc/haproxy/haproxy.cfg","-W"]
+          ports: [{ name: pg, containerPort: 5432 }]
+          volumeMounts:
+            - { name: cfg, mountPath: /usr/local/etc/haproxy }
+          readinessProbe:
+            tcpSocket: { port: 5432 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            tcpSocket: { port: 5432 }
+            initialDelaySeconds: 10
+          resources: {{- toYaml .Values.haproxy.resources | nindent 12 }}
+      volumes:
+        - name: cfg
+          configMap: { name: haproxy-read }

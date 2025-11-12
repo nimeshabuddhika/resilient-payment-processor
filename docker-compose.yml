@@ -150,6 +150,8 @@ services:
       - ./configs/postgres/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
     command: ["pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
 
+
+  # RPP Services (order-api, payment-worker, fraud-ml-service)
   order-api:
     image: order-api:latest
     build:
@@ -247,6 +249,19 @@ services:
       logging: "promtail"
     }
 
+
+  redis:
+    image: redis:8.2.2
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    hostname: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  # Grafana stack
   prometheus:
     image: prom/prometheus:v3.7.2
     container_name: prometheus
@@ -273,16 +288,6 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin  # For local development only
     depends_on:
       - prometheus
-  redis:
-    image: redis:8.2.2
-    container_name: redis
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    hostname: redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
 
   loki:
     image: grafana/loki:3.5
@@ -313,7 +318,5 @@ volumes:
   grafana-data:
   kafka-data:
   kafka-secrets:
-  zookeeper-data:
-  zookeeper-secrets:
   redis-data:
   loki-data:

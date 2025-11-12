@@ -1,0 +1,28 @@
+image:
+  repository: redis
+  tag: "8.2.2"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 6379
+
+resources: {}
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: ""  # leave blank to use cluster default
+  accessModes: ["ReadWriteOnce"]
+
+nodeSelector:
+  rpp: infra
+

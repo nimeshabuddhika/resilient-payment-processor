@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.paymentWorker.app.name }}
+  labels:
+    app: {{ .Values.paymentWorker.app.name }}
+  annotations:
+    prometheus.io/scrape: {{.Values.paymentWorker.metrics.enabled  | quote}}
+    prometheus.io/port: {{.Values.paymentWorker.metrics.port | quote }}
+    prometheus.io/path: {{.Values.paymentWorker.metrics.path}}
+    prometheus.io/scheme: {{.Values.paymentWorker.metrics.scheme}}
+spec:
+  replicas: {{ .Values.paymentWorker.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.paymentWorker.app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.paymentWorker.app.name }}
+        {{- range $k, $v := .Values.paymentWorker.labels }}
+        {{ $k }}: "{{ $v }}"
+        {{- end }}
+    spec:
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.paymentWorker.app.name }}
+          image: {{ .Values.paymentWorker.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{.Values.paymentWorker.metrics.port}}
+          envFrom:
+            - configMapRef:
+                name: {{.Values.paymentWorker.configmap.name}}
+            - secretRef:
+                name: {{.Values.paymentWorker.secretConfig.name}}
+          # Worker doesn't expose HTTP, only metrics.
+          resources:
+            {{ toYaml .Values.resources | indent 12 }}

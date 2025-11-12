@@ -1,0 +1,42 @@
+namespace: infra
+
+kafka:
+  image: confluentinc/cp-kafka:8.1.0
+  replicas: 1
+  nodeSelector:
+    rpp: infra
+  resources: {}
+  storage:
+    size: 10Gi
+    storageClassName: ""   # leave empty to use default; or set to "local-path" etc.
+  # Use a fixed cluster ID you generated once (keep it stable for the data dir)
+  # Generate with: docker run --rm confluentinc/cp-kafka:8.1.0 bash -lc "/bin/kafka-storage random-uuid"
+  clusterId: "wwzzneZZTnC4sIfebR08Yw"
+  # Expose host access (NodePort) on 9092; disable if only cluster-internal is needed
+  external:
+    enabled: true
+    nodePort: 30992
+    advertisedHost: "127.0.0.1"   # for k3d use "host.k3d.internal"
+  # Kafka tuning mirrored from docker-compose
+  config:
+    OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+    TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+    TRANSACTION_STATE_LOG_MIN_ISR: "1"
+    GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+    AUTO_CREATE_TOPICS_ENABLE: "false"
+
+kafkaUi:
+  image: provectuslabs/kafka-ui:latest
+  nodeSelector:
+    rpp: infra
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: true
+    className: "traefik"                # k3s default
+    host: "kafka-ui.localtest.me"
+    path: "/"
+    tls:
+      enabled: false                    # tls configuration
+      secretName: "kafka-ui-tls"
+  resources: {}

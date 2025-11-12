@@ -28,14 +28,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates librdkafka1 && \
     rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd -u 65532 -r -g nogroup -s /usr/sbin/nologin nonroot
+# Create non-root user with a real home and make it writable
+RUN useradd -u 65532 -r -g nogroup -d /home/nonroot -s /usr/sbin/nologin nonroot && \
+    mkdir -p /home/nonroot /tmp/go-build-cache /tmp/go-mod-cache && \
+    chown -R 65532:65532 /home/nonroot /tmp/go-build-cache /tmp/go-mod-cache
+
+# Give anything that inspects $HOME or Go caches a safe place to write
+ENV HOME=/home/nonroot \
+    GOCACHE=/tmp/go-build-cache \
+    GOMODCACHE=/tmp/go-mod-cache
 
 # Copy binary
 COPY --from=builder /out/order-api /app/order-api
 
 # Expose service port (match config default or env)
-EXPOSE 8080
+EXPOSE 8081
 
 # Run as non-root
 USER 65532:65532

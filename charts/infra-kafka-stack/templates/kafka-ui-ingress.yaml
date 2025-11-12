@@ -1,0 +1,32 @@
+{{- if .Values.kafkaUi.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kafka-ui
+  labels: { app: kafka-ui }
+  {{- with .Values.kafkaUi.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.kafkaUi.ingress.className }}
+  ingressClassName: {{ .Values.kafkaUi.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.kafkaUi.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.kafkaUi.ingress.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: kafka-ui
+                port:
+                  number: 8080
+  {{- if .Values.kafkaUi.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.kafkaUi.ingress.host }}
+      secretName: {{ .Values.kafkaUi.ingress.tls.secretName }}
+  {{- end }}
+{{- end }}
