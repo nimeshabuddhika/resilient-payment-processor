@@ -1,0 +1,6 @@
+apiVersion: v2
+name: rpp-apps
+description: RPP application services (order-api, payment-worker, fraud-ml-service)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

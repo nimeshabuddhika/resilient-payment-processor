@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  labels: { app: kafka-ui }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: kafka-ui }
+  template:
+    metadata:
+      labels: { app: kafka-ui }
+    spec:
+      nodeSelector: {{- toYaml .Values.kafkaUi.nodeSelector | nindent 8 }}
+      containers:
+        - name: ui
+          image: {{ .Values.kafkaUi.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - { name: KAFKA_CLUSTERS_0_NAME, value: "local" }
+            - { name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS, value: "kafka:29092" }
+          resources:
+            {{- toYaml .Values.kafkaUi.resources | nindent 12 }}

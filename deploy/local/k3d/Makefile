@@ -76,25 +76,64 @@ images: builder ## Build and push services images to registry
 
 ##@ Infrastructure Management
 
-.PHONY : init-infra
-infra-init: ## Create fundamental infrastructures
+.PHONY : init-nodes
+init-nodes: ## Create fundamental infrastructures
 	kubectl create ns infra
+	kubectl create ns db
+	kubectl create ns apps
 
 	@echo "Assigning labels"
-	kubectl label node k3d-rpp-agent-0 rpp=infra --overwrite #kafka, kafka-ui, prometheus, grafana, loki, promtail
+	kubectl label node k3d-rpp-agent-0 rpp=infra --overwrite #kafka, kafka-ui, redis, prometheus, grafana, loki, promtail
 	kubectl label node k3d-rpp-agent-1 rpp=db --overwrite # postgres-primary, postgres-replica-[1..2], haproxy-read, pgbouncer-*
-	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service, redis
+	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
 
-.PHONY : init-kafka
-init-kafka: ## Provision kafka
+.PHONY : init-infra
+init-infra: ## Provision kafka, redis
 	@echo "Install Kafka"
-	helm upgrade --install infra-kafka $(ROOT)/charts/infra-kafka -n infra \
-      -f $(ROOT)/deploy/envs/local-k3d.values.yaml
+	helm upgrade --install infra-kafka-stack $(ROOT)charts/infra-kafka-stack -n infra
+
+	@echo "Install redis"
+	helm upgrade --install infra-redis $(ROOT)charts/infra-redis -n infra
+
+	@echo "Install observability services"
+	helm upgrade --install infra-observability $(ROOT)charts/infra-observability -n infra
 
     # Wait and check the external NodePort
-	kubectl -n infra get svc
+	kubectl -n infra get po -o wide
 
-.PHONY : uninstall-kafka
-uninstall-kafka: ## Uninstall kafka
+.PHONY : uninstall-infra
+uninstall-infra: ## Uninstall kafka, redis
 	helm list -n infra
-	helm uninstall infra-kafka -n infra
+	helm uninstall infra-kafka-stack -n infra
+	helm uninstall infra-redis -n infra
+	helm uninstall infra-observability -n infra
+	#kubectl -n infra delete pvc data-infra-redis-redis-0 data-kafka-0 data-redis-0
+
+
+.PHONY : init-db
+init-db: ## Provision Postgres Database
+	@echo "Install Postgres"
+	helm upgrade --install db-stack $(ROOT)charts/db-stack -n db
+
+    # Wait and check the external NodePort
+	kubectl -n db get po -o wide
+
+.PHONY : uninstall-db
+uninstall-db: ## Uninstall kafka
+	helm list -n db
+	helm uninstall db-stack -n db
+	@echo "Delete Postgres Persistence volumes (PVC)"
+	kubectl -n db delete pvc data-postgres-primary-0 data-postgres-replica-1-0 data-postgres-replica-2-0
+
+.PHONY : init-apps
+init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)
+	@echo "Deploy order-api, payment-worker, fraud-ml-service"
+	helm upgrade --install apps-rpp $(ROOT)charts/apps-rpp -n apps
+
+    # Wait and check the external NodePort
+	kubectl -n apps get po -o wide
+
+.PHONY : uninstall-apps
+uninstall-apps: ## Uninstall apps (order-api, payment-worker, fraud-ml-service)
+	helm list -n apps
+	helm uninstall apps-rpp -n apps

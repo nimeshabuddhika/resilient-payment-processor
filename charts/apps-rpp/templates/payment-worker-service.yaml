@@ -1,0 +1,20 @@
+{{- if .Values.paymentWorker.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Values.paymentWorker.metrics.name}}
+  labels:
+    app: {{.Values.paymentWorker.app.name}}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.paymentWorker.metrics.port }}"
+    prometheus.io/path: "{{ .Values.paymentWorker.metrics.path }}"
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.paymentWorker.app.name }}
+  ports:
+    - name: metrics
+      port: {{ .Values.paymentWorker.metrics.port }}
+      targetPort: {{ .Values.paymentWorker.metrics.port }}
+{{- end }}

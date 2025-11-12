@@ -1,6 +1,0 @@
-apiVersion: v2
-name: infra-kafka-ui
-description: Kafka UI for local/dev clusters
-type: application
-version: 0.1.0
-appVersion: "latest"

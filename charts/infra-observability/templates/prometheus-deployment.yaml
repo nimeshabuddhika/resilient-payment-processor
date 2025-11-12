@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.Values.prometheus.app.name}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{.Values.prometheus.app.name}}
+  template:
+    metadata:
+      labels:
+        app: {{.Values.prometheus.app.name}}
+    spec:
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector | indent 8 }}
+      serviceAccountName: {{.Values.prometheus.app.name}}
+      containers:
+        - name: {{.Values.prometheus.app.name}}
+          image: {{ .Values.prometheus.image }}
+          args:
+            {{- range .Values.prometheus.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{.Values.prometheus.port}}
+          volumeMounts:
+            - name: prom-config
+              mountPath: /etc/prometheus
+            - name: prom-data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: {{.Values.prometheus.port}}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: {{.Values.prometheus.port}}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: prom-config
+          configMap:
+            name: {{ .Values.prometheus.configMap.name }}
+            items:
+              - key: {{ .Values.prometheus.configMap.key }}
+                path: prometheus.yml
+        - name: prom-data
+          persistentVolumeClaim:
+            claimName: prometheus-data

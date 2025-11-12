@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-write
+data:
+  pgbouncer.ini: |
+{{ tpl .Values.pgbouncer.write.ini . | indent 4 }}

@@ -1,0 +1,107 @@
+namespace: infra
+
+nodeSelector:
+  rpp: infra
+
+storageClassName: ""   # empty -> default storage class (e.g., local-path on k3d)
+persistence:
+  size:
+    prometheus: 10Gi
+    grafana: 5Gi
+    loki: 10Gi
+
+prometheus:
+  image: prom/prometheus:v3.7.2
+  port: 9090
+  service:
+    name: "prometheus-svc"
+    port: 9090
+  app:
+    name: "prometheus"
+  storageClassName: ""
+  configMap:
+    name: prometheus-config
+    key: prometheus.yml
+  extraArgs:
+    - --web.enable-lifecycle
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+  ingress:
+    name: "prometheus-ingress"
+    enabled: true
+    className: traefik
+    host: "prometheus.localtest.me"
+    path: "/"
+    tls:
+      enabled: false
+      secretName: "prometheus-tls"
+
+
+grafana:
+  image: grafana/grafana:12.2
+  app:
+    name: "grafana"
+  admin:
+    username: admin
+    password: admin   # local/dev only
+  service:
+    name: "grafana-service"
+    port: 3000
+  ingress:
+    name: "grafana-ingress"
+    enabled: true
+    className: traefik
+    host: "grafana.localtest.me"
+    path: "/"
+    tls:
+      enabled: false
+      secretName: "grafana-tls"
+
+loki:
+  image: grafana/loki:3.5.0
+  port: 3100
+  app:
+    name: "loki"
+  service:
+    name: "loki-service"
+    type: ClusterIP
+  pvc: # Persistent Volume Claim
+    name: "loki-data"
+
+promtail:
+  image: grafana/promtail:3.5.0
+  resources: {}
+  # Default K8s-discovery config for container logs -> Loki
+  config: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+    positions:
+      filename: /run/promtail/positions.yaml
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+    scrape_configs:
+      - job_name: kubernetes-pods
+        pipeline_stages:
+          - docker: {}
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_node_name]
+            target: __host__
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_container_name]
+            regex: .+
+          - action: replace
+            source_labels: [__meta_kubernetes_namespace]
+            target: namespace
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_name]
+            target: pod
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_container_name]
+            target: container
+          - action: replace
+            replacement: /var/log/pods/*/*/*.log
+            target: __path__

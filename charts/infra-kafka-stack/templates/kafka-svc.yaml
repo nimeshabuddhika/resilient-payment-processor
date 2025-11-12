@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels: { app: kafka }
+spec:
+  type: {{ if .Values.kafka.external.enabled }}NodePort{{ else }}ClusterIP{{ end }}
+  selector: { app: kafka }
+  ports:
+    # Internal bootstrap for in-cluster clients
+    - name: internal
+      port: 29092
+      targetPort: 29092
+    # Optional external/host access
+    - name: external
+      port: 9092
+      targetPort: 9092
+      {{- if .Values.kafka.external.enabled }}
+      nodePort: {{ .Values.kafka.external.nodePort }}
+      {{- end }}

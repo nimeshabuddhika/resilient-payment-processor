@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.loki.app.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.loki.app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.loki.app.name }}
+    spec:
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector | indent 8 }}
+      containers:
+        - name: loki
+          image: {{ .Values.loki.image }}
+          ports:
+            - containerPort: {{ .Values.loki.port }}
+          volumeMounts:
+            - name: {{.Values.loki.pvc.name}}
+              mountPath: /loki
+      volumes:
+        - name: {{.Values.loki.pvc.name}}
+          persistentVolumeClaim:
+            claimName: {{.Values.loki.pvc.name}}
