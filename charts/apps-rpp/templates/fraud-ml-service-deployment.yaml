@@ -13,16 +13,18 @@ spec:
     metadata:
       labels:
         app: {{.Values.fraudMlService.app.name}}
-{{- range $k, $v := .Values.fraudMlService.labels }}
-        {{ $k }}: "{{ $v }}"
-{{- end }}
+      annotations:
+        prometheus.io/scrape: {{.Values.fraudMlService.metrics.enabled | quote}}
+        prometheus.io/port: {{.Values.fraudMlService.port | quote }}
+        prometheus.io/path: {{.Values.fraudMlService.metrics.path}}
+        prometheus.io/scheme: {{.Values.fraudMlService.metrics.scheme}}
     spec:
       nodeSelector:
-{{ toYaml .Values.nodeSelector | indent 8 }}
-{{- if .Values.imagePullSecrets }}
+        {{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-{{ toYaml .Values.imagePullSecrets | indent 8 }}
-{{- end }}
+        {{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
       containers:
         - name: {{.Values.fraudMlService.app.name}}
           image: {{ .Values.fraudMlService.image }}

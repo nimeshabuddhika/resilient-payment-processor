@@ -4,6 +4,11 @@ metadata:
   name: {{ .Values.paymentWorker.app.name }}
   labels:
     app: {{ .Values.paymentWorker.app.name }}
+  annotations:
+    prometheus.io/scrape: {{.Values.paymentWorker.metrics.enabled  | quote}}
+    prometheus.io/port: {{.Values.paymentWorker.metrics.port | quote }}
+    prometheus.io/path: {{.Values.paymentWorker.metrics.path}}
+    prometheus.io/scheme: {{.Values.paymentWorker.metrics.scheme}}
 spec:
   replicas: {{ .Values.paymentWorker.replicas }}
   selector:
@@ -27,6 +32,8 @@ spec:
         - name: {{ .Values.paymentWorker.app.name }}
           image: {{ .Values.paymentWorker.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{.Values.paymentWorker.metrics.port}}
           envFrom:
             - configMapRef:
                 name: {{.Values.paymentWorker.configmap.name}}

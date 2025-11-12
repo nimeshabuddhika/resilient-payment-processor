@@ -16,6 +16,11 @@ spec:
         {{- range $k, $v := .Values.orderApi.labels }}
         {{ $k }}: "{{ $v }}"
         {{- end }}
+      annotations:
+        prometheus.io/scrape: {{.Values.orderApi.metrics.enabled | quote}}
+        prometheus.io/port: {{ .Values.orderApi.port | quote }}
+        prometheus.io/path: {{.Values.orderApi.metrics.path}}
+        prometheus.io/scheme: {{.Values.orderApi.metrics.scheme}}
     spec:
       nodeSelector:
         {{ toYaml .Values.nodeSelector | indent 8 }}

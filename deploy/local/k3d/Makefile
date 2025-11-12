@@ -107,6 +107,7 @@ uninstall-infra: ## Uninstall kafka, redis
 	helm uninstall infra-kafka-stack -n infra
 	helm uninstall infra-redis -n infra
 	helm uninstall infra-observability -n infra
+	#kubectl -n infra delete pvc data-infra-redis-redis-0 data-kafka-0 data-redis-0
 
 
 .PHONY : init-db

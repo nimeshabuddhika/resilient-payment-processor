@@ -106,7 +106,7 @@ seed-users-and-accounts: ## Seed Users and User accounts directly to the databas
 
 .PHONY: seed-orders
 seed-orders: ## Seed orders via order-api
-	go run $(ORDER_SEED_FILE) -orderApiUrl http://localhost:8081 -noOfOrders 50000 -noOfOrdersPerAccount 1 -rps=500
+	go run $(ORDER_SEED_FILE) -noOfOrders 100 -noOfOrdersPerAccount 1 -rps=500 -orderApiUrl http://order-api.localtest.me # http://order-api.localtest.me, http://localhost:8081
 
 .PHONY: seed
 seed: seed-users-and-accounts seed-orders ## Seed users accounts and orders

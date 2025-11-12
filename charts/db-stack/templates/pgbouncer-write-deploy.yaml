@@ -11,7 +11,7 @@ spec:
       labels: { app: pgbouncer-write }
     spec:
       nodeSelector:
-        {{- toYaml .Values.nodeSelector | nindent 8 }}
+        {{ toYaml .Values.nodeSelector | indent 8 }}
       containers:
         - name: pgbouncer
           image: {{ .Values.images.pgbouncer }}

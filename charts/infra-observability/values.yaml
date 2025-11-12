@@ -12,36 +12,30 @@ persistence:
 
 prometheus:
   image: prom/prometheus:v3.7.2
+  port: 9090
   service:
-    type: NodePort         # Change to ClusterIP if you’ll use ingress
-    nodePort: 30900
-  resources: {}
-  config: |
-    global:
-      scrape_interval: 15s
-      evaluation_interval: 15s
+    name: "prometheus-svc"
+    port: 9090
+  app:
+    name: "prometheus"
+  storageClassName: ""
+  configMap:
+    name: prometheus-config
+    key: prometheus.yml
+  extraArgs:
+    - --web.enable-lifecycle
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+  ingress:
+    name: "prometheus-ingress"
+    enabled: true
+    className: traefik
+    host: "prometheus.localtest.me"
+    path: "/"
+    tls:
+      enabled: false
+      secretName: "prometheus-tls"
 
-    scrape_configs:
-      # Scrape order-api
-      - job_name: order-api
-      static_configs:
-      - targets: [ 'order-api:8081' ]  # Internal service, add labels for multi-replica
-      metrics_path: /metrics
-    
-      # Scrape payment-worker
-      - job_name: payment-worker
-        scrape_interval: 5s
-        static_configs:
-          - targets:
-              - payment-worker:2112
-    
-      # Scrape fraud-ml-service
-      - job_name: 'fraud-ml-service'
-        scrape_interval: 15s
-        scrape_timeout: 10s
-        metrics_path: /metrics
-        static_configs:
-          - targets: [ 'fraud-ml-service:8082' ]
 
 grafana:
   image: grafana/grafana:12.2

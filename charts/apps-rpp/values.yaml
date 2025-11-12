@@ -21,7 +21,7 @@ orderApi:
   service:
     name: "order-api-svc"
   env:
-    GIN_MODE: "debug"
+    GIN_MODE: "release"
     APP_PORT: "8081"
     APP_KAFKA_BROKERS: "kafka.infra.svc.cluster.local:29092"
     APP_KAFKA_ORDER_TOPIC: "orders-placed"
@@ -41,6 +41,12 @@ orderApi:
     tls:
       enabled: false
       secretName: "order-api-tls"
+  # Prometheus annotation scrape via service
+  metrics:
+    enabled: true
+    name: "order-api-metrics-svc"
+    path: "/metrics"
+    scheme: "http"
 
 paymentWorker:
   replicas: 1
@@ -74,7 +80,7 @@ paymentWorker:
     APP_MAX_RETRY_COUNT: "3"
     APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "1000"
     APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "1000"
-    APP_FRAUD_ML_SERVICE_ADDR: "http://fraud-ml-service:8082"
+    APP_FRAUD_ML_SERVICE_ADDR: "http://fraud-ml-svc:8082"
     APP_ML_RATE_LIMIT_PER_SEC: "1000"
     APP_ML_REQUEST_BURST: "60"
     APP_ML_REQUEST_MAX_THROTTLE_WAIT: "1s"
@@ -85,16 +91,15 @@ paymentWorker:
   # Prometheus annotation scrape via service
   metrics:
     enabled: true
-    name: "payment-worker-metrics"
+    name: "payment-worker-metrics-svc"
     port: 2112
-    path: /metrics
+    path: "/metrics"
+    scheme: "http"
 
 fraudMlService:
   replicas: 1
   image: "rpp-registry:5000/fraud-ml-service:dev"
   port: 8082
-  labels:
-    logging: "promtail"
   app:
     name: "fraud-ml-service"
   configmap:
@@ -114,3 +119,9 @@ fraudMlService:
     tls:
       enabled: false
       secretName: "fraud-ml-service-tls"
+  # Prometheus annotation scrape via service
+  metrics:
+    enabled: true
+    name: "fraud-ml-service-metrics-svc"
+    path: "/metrics"
+    scheme: "http"

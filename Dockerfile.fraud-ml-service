@@ -1,28 +1,37 @@
-# Use slim base for maintainabilit
+# Minimal, single-process Gunicorn worker for K8s HPA
 FROM python:3.12-slim
+
+# System deps (ONNXRuntime on CPU needs libgomp1)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8082
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 && \
-    rm -rf /var/lib/apt/lists/*
-
+# Install Python deps
 COPY services/fraud-ml-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
-# --- Multiprocess metrics directory ---
-ENV PROMETHEUS_MULTIPROC_DIR=/tmp/metrics
-RUN mkdir -p /tmp/metrics
-
-# Copy source
+# Copy app and model
 COPY services/fraud-ml-service/app.py .
 COPY services/fraud-ml-service/train/fraud_model.onnx train/
 
-# Clean multiprocess files at start (CRITICAL for restarts)
-COPY services/fraud-ml-service/docker-entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# (Optional) set ONNX threading via env at runtime:
+#   -e ORT_INTRA_OP=1 -e ORT_INTER_OP=1
+# Tune per pod cpu limits/requests.
+
+# Create non-root user and set ownership (K8s-friendly)
+RUN useradd -u 10001 -r -s /usr/sbin/nologin appuser && \
+    chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8082
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8082", "--workers", "4", "app:app"]
+# Single worker, single thread; clean logging to stdout/stderr
+# Add mild recycling to protect against rare leaks
+#CMD ["gunicorn", "--bind", "0.0.0.0:8082", "--workers", "1","--threads", "1", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8082", "--workers", "1", "--threads", "1", "--worker-class", "sync", "--timeout", "30", "--graceful-timeout", "30", "--keep-alive", "5", "--max-requests", "2000", "--max-requests-jitter", "200", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

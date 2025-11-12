@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+spec:
+  selector: { matchLabels: { app: promtail } }
+  template:
+    metadata:
+      labels: { app: promtail }
+    spec:
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector | indent 8 }}
+      serviceAccountName: promtail
+      containers:
+        - name: promtail
+          image: {{ .Values.promtail.image }}
+          args: ["-config.file=/etc/promtail/promtail.yaml"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/promtail
+            - name: varlog
+              mountPath: /var/log
+            - name: run
+              mountPath: /run/promtail
+      volumes:
+        - name: config
+          configMap:
+            name: promtail-config
+            items: [{ key: promtail.yaml, path: promtail.yaml }]
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: run
+          emptyDir: {}
