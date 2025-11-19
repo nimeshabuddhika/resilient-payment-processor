@@ -2,33 +2,140 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: promtail
+  namespace: {{.Values.namespace}}
 spec:
-  selector: { matchLabels: { app: promtail } }
+  selector:
+    matchLabels:
+      app: promtail
   template:
     metadata:
       labels: { app: promtail }
     spec:
-      nodeSelector:
-        {{ toYaml .Values.nodeSelector | indent 8 }}
-      serviceAccountName: promtail
+      automountServiceAccountToken: true
       containers:
-        - name: promtail
-          image: {{ .Values.promtail.image }}
-          args: ["-config.file=/etc/promtail/promtail.yaml"]
+        - args:
+            - -config.file=/etc/promtail/promtail.yaml
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          image: docker.io/grafana/promtail:3.5.1
+          imagePullPolicy: IfNotPresent
+          name: promtail
+          ports:
+            - containerPort: 3101
+              name: http-metrics
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /ready
+              port: http-metrics
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
           volumeMounts:
-            - name: config
-              mountPath: /etc/promtail
-            - name: varlog
-              mountPath: /var/log
-            - name: run
-              mountPath: /run/promtail
+            - mountPath: /etc/promtail
+              name: config
+            - mountPath: /run/promtail
+              name: run
+            - mountPath: /var/lib/docker/containers
+              name: containers
+              readOnly: true
+            - mountPath: /var/log/pods
+              name: pods
+              readOnly: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsGroup: 0
+        runAsUser: 0
+      serviceAccountName: promtail
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
       volumes:
         - name: config
           configMap:
-            name: promtail-config
-            items: [{ key: promtail.yaml, path: promtail.yaml }]
-        - name: varlog
-          hostPath:
-            path: /var/log
-        - name: run
-          emptyDir: {}
+            defaultMode: 420
+            name: promtail-loki-config
+        - hostPath:
+            path: /run/promtail
+            type: ""
+          name: run
+        - hostPath:
+            path: /var/lib/docker/containers
+            type: ""
+          name: containers
+        - hostPath:
+            path: /var/log/pods
+            type: ""
+          name: pods
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+
+
+
+
+
+
+
+
+
+
+
+{{/*apiVersion: apps/v1*/}}
+{{/*kind: DaemonSet*/}}
+{{/*metadata:*/}}
+{{/*  name: promtail*/}}
+{{/*spec:*/}}
+{{/*  selector: { matchLabels: { app: promtail } }*/}}
+{{/*  template:*/}}
+{{/*    metadata:*/}}
+{{/*      labels: { app: promtail }*/}}
+{{/*    spec:*/}}
+{{/*      serviceAccountName: promtail*/}}
+{{/*      containers:*/}}
+{{/*        - name: promtail*/}}
+{{/*          image: {{ .Values.promtail.image }}*/}}
+{{/*          args: ["-config.file=/etc/promtail/promtail.yaml"]*/}}
+{{/*          volumeMounts:*/}}
+{{/*            - name: config*/}}
+{{/*              mountPath: /etc/promtail*/}}
+{{/*            - name: varlog*/}}
+{{/*              mountPath: /var/log*/}}
+{{/*            - name: run*/}}
+{{/*              mountPath: /run/promtail*/}}
+{{/*      volumes:*/}}
+{{/*        - name: config*/}}
+{{/*          configMap:*/}}
+{{/*            name: promtail-config*/}}
+{{/*            items: [{ key: promtail.yaml, path: promtail.yaml }]*/}}
+{{/*        - name: varlog*/}}
+{{/*          hostPath:*/}}
+{{/*            path: /var/log*/}}
+{{/*        - name: run*/}}
+{{/*          emptyDir: {}*/}}

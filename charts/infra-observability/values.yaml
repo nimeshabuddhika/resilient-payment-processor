@@ -71,37 +71,3 @@ loki:
 promtail:
   image: grafana/promtail:3.5.0
   resources: {}
-  # Default K8s-discovery config for container logs -> Loki
-  config: |
-    server:
-      http_listen_port: 9080
-      grpc_listen_port: 0
-    positions:
-      filename: /run/promtail/positions.yaml
-    clients:
-      - url: http://loki:3100/loki/api/v1/push
-    scrape_configs:
-      - job_name: kubernetes-pods
-        pipeline_stages:
-          - docker: {}
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - action: replace
-            source_labels: [__meta_kubernetes_pod_node_name]
-            target: __host__
-          - action: keep
-            source_labels: [__meta_kubernetes_pod_container_name]
-            regex: .+
-          - action: replace
-            source_labels: [__meta_kubernetes_namespace]
-            target: namespace
-          - action: replace
-            source_labels: [__meta_kubernetes_pod_name]
-            target: pod
-          - action: replace
-            source_labels: [__meta_kubernetes_pod_container_name]
-            target: container
-          - action: replace
-            replacement: /var/log/pods/*/*/*.log
-            target: __path__
