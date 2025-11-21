@@ -25,7 +25,7 @@ spec:
           imagePullPolicy: IfNotPresent
           name: promtail
           ports:
-            - containerPort: 3101
+            - containerPort: 9080
               name: http-metrics
               protocol: TCP
           readinessProbe:
@@ -38,7 +38,13 @@ spec:
             periodSeconds: 10
             successThreshold: 1
             timeoutSeconds: 1
-          resources: {}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

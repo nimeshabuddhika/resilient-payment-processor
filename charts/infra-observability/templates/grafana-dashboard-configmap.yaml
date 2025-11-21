@@ -1712,7 +1712,7 @@ data:
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 0,
-      "id": 1,
+      "id": 3,
       "links": [],
       "panels": [
         {
@@ -1742,7 +1742,7 @@ data:
             "sortOrder": "Descending",
             "wrapLogMessage": false
           },
-          "pluginVersion": "12.2.0",
+          "pluginVersion": "12.2.1",
           "targets": [
             {
               "datasource": {
@@ -1843,7 +1843,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.0",
+          "pluginVersion": "12.2.1",
           "targets": [
             {
               "datasource": {
@@ -1985,7 +1985,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.0",
+          "pluginVersion": "12.2.1",
           "targets": [
             {
               "datasource": {
@@ -2079,7 +2079,7 @@ data:
             "sortOrder": "Descending",
             "wrapLogMessage": false
           },
-          "pluginVersion": "12.2.0",
+          "pluginVersion": "12.2.1",
           "targets": [
             {
               "datasource": {
@@ -2123,7 +2123,7 @@ data:
       "timezone": "browser",
       "title": "Payment Worker - Loki",
       "uid": "addgs4b",
-      "version": 5
+      "version": 1
     }
   payment-worker-prometheus.json: |
     {
