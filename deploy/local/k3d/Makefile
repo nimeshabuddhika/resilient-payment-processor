@@ -74,21 +74,42 @@ images: builder ## Build and push services images to registry
 	docker buildx build --platform $(PLATFORM) -t $(FRAUD_ML_SERVICE_IMG) -f $(FRAUD_ML_SERVICE_DOCKERFILE) $(ROOT) --load
 	docker push $(FRAUD_ML_SERVICE_IMG)
 
+.PHONY : push
+push: ## Push services images to registry
+	docker push $(ORDER_API_IMG)
+	docker push $(PAYMENT_WORKER_IMG)
+	docker push $(FRAUD_ML_SERVICE_IMG)
+
 ##@ Infrastructure Management
+
+.PHONY : init-keda
+init-keda: ## Install KEDA including CRDs
+	helm repo add kedacore https://kedacore.github.io/charts
+	helm repo update
+	kubectl create namespace keda || true
+	helm upgrade --install keda kedacore/keda \
+      --namespace keda
 
 .PHONY : init-nodes
 init-nodes: ## Create fundamental infrastructures
-	kubectl create ns infra
-	kubectl create ns db
-	kubectl create ns apps
+	@echo "Initializing nodes"
+	kubectl create ns infra || true
+	kubectl create ns db || true
+	kubectl create ns apps || true
 
 	@echo "Assigning labels"
 	kubectl label node k3d-rpp-agent-0 rpp=infra --overwrite #kafka, kafka-ui, redis, prometheus, grafana, loki, promtail
 	kubectl label node k3d-rpp-agent-1 rpp=db --overwrite # postgres-primary, postgres-replica-[1..2], haproxy-read, pgbouncer-*
 	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
+	kubectl label node k3d-rpp-agent-3 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
+
+	@echo "Installing KEDA"
+	$(MAKE) init-keda
 
 .PHONY : init-infra
 init-infra: ## Provision kafka, redis
+	$(MAKE) init-nodes
+
 	@echo "Install Kafka"
 	helm upgrade --install infra-kafka-stack $(ROOT)charts/infra-kafka-stack -n infra
 
@@ -107,11 +128,12 @@ uninstall-infra: ## Uninstall kafka, redis
 	helm uninstall infra-kafka-stack -n infra
 	helm uninstall infra-redis -n infra
 	helm uninstall infra-observability -n infra
-	#kubectl -n infra delete pvc data-infra-redis-redis-0 data-kafka-0 data-redis-0
+	kubectl -n infra delete pvc data-kafka-0 data-redis-0 grafana-data loki-data prometheus-data
 
 
 .PHONY : init-db
 init-db: ## Provision Postgres Database
+	$(MAKE) init-nodes
 	@echo "Install Postgres"
 	helm upgrade --install db-stack $(ROOT)charts/db-stack -n db
 
@@ -127,6 +149,9 @@ uninstall-db: ## Uninstall kafka
 
 .PHONY : init-apps
 init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)
+	$(MAKE) push
+	$(MAKE) init-nodes
+
 	@echo "Deploy order-api, payment-worker, fraud-ml-service"
 	helm upgrade --install apps-rpp $(ROOT)charts/apps-rpp -n apps
 

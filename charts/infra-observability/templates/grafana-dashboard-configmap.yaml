@@ -1712,7 +1712,7 @@ data:
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 0,
-      "id": 3,
+      "id": 1,
       "links": [],
       "panels": [
         {
@@ -1728,6 +1728,51 @@ data:
             "h": 8,
             "w": 12,
             "x": 0,
+            "y": 0
+          },
+          "id": 5,
+          "options": {
+            "dedupStrategy": "none",
+            "enableInfiniteScrolling": false,
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": false,
+            "showTime": false,
+            "sortOrder": "Descending",
+            "wrapLogMessage": false
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "P8F7BD5764BAA734F"
+              },
+              "direction": "backward",
+              "editorMode": "code",
+              "expr": "{container=\"payment-worker\"} | json | level = `info`",
+              "queryType": "range",
+              "refId": "A"
+            }
+          ],
+          "title": "Payment-worker info logs",
+          "type": "logs"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8F7BD5764BAA734F"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
             "y": 0
           },
           "id": 4,
@@ -1751,139 +1796,13 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "{service_name=~\"^payment-worker.*\"} | json | msg = `payment_processed_successfully`",
+              "expr": "{container=\"payment-worker\"} | json | level = `error`",
               "queryType": "range",
               "refId": "A"
             }
           ],
-          "title": "Payment-worker logs",
+          "title": "Payment-worker errors",
           "type": "logs"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "P8F7BD5764BAA734F"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "continuous-GrYlRd"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "barWidthFactor": 0.6,
-                "drawStyle": "line",
-                "fillOpacity": 20,
-                "gradientMode": "scheme",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineStyle": {
-                  "fill": "solid"
-                },
-                "lineWidth": 3,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "showValues": false,
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 0
-          },
-          "id": 3,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "hidden",
-              "placement": "right",
-              "showLegend": false
-            },
-            "tooltip": {
-              "hideZeros": false,
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "12.2.2",
-          "targets": [
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "P8F7BD5764BAA734F"
-              },
-              "direction": "backward",
-              "editorMode": "code",
-              "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_commited_successfully`[$__range]))",
-              "hide": false,
-              "queryType": "range",
-              "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "P8F7BD5764BAA734F"
-              },
-              "direction": "backward",
-              "editorMode": "code",
-              "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_failed_to_commit`[$__range]))",
-              "hide": false,
-              "queryType": "range",
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "P8F7BD5764BAA734F"
-              },
-              "direction": "backward",
-              "editorMode": "code",
-              "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `payment_processed_successfully`[$__range]))",
-              "hide": false,
-              "queryType": "range",
-              "refId": "C"
-            }
-          ],
-          "title": "Order success By Range",
-          "type": "timeseries"
         },
         {
           "datasource": {
@@ -1994,7 +1913,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `processing_payment_job`[$__range]))",
+              "expr": "sum by (msg) (count_over_time({container=\"payment-worker\"} | json | msg = `processing_payment_job`[$__range]))",
               "hide": false,
               "queryType": "range",
               "refId": "C"
@@ -2006,7 +1925,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `payment_processed_successfully`[$__range]))",
+              "expr": "sum by (msg) (count_over_time({container=\"payment-worker\"} | json | msg = `payment_processed_successfully`[$__range]))",
               "hide": false,
               "queryType": "range",
               "refId": "B"
@@ -2018,7 +1937,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `process_payment_failed_sending_to_dlq`[$__range]))",
+              "expr": "sum by (msg) (count_over_time({container=\"payment-worker\"} | json | msg = `process_payment_failed_sending_to_dlq`[$__range]))",
               "hide": false,
               "queryType": "range",
               "refId": "D"
@@ -2030,7 +1949,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "sum by (msg) (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `order_commited_successfully`[1m]) )",
+              "expr": "sum by (msg) (count_over_time({container=\"payment-worker\"} | json | msg = `order_commited_successfully`[1m]) )",
               "legendFormat": "msg",
               "queryType": "range",
               "refId": "A",
@@ -2043,7 +1962,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "sum by(msg)  (count_over_time({service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | caller =~ \"^services/kafka_order_handler.*\" | msg = `order_failed_to_commit`[1m]) )",
+              "expr": "sum by(msg)  (count_over_time({container=\"payment-worker\"} | json | caller =~ \"^services/kafka_order_handler.*\" | msg = `order_failed_to_commit`[1m]) )",
               "hide": false,
               "queryType": "range",
               "refId": "E"
@@ -2064,8 +1983,8 @@ data:
           "gridPos": {
             "h": 8,
             "w": 12,
-            "x": 0,
-            "y": 16
+            "x": 12,
+            "y": 8
           },
           "id": 2,
           "options": {
@@ -2146,7 +2065,7 @@ data:
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 0,
-      "id": 4,
+      "id": 2,
       "links": [],
       "panels": [
         {
@@ -2154,7 +2073,7 @@ data:
             "type": "prometheus",
             "uid": "P15DD9179034F6BA1"
           },
-          "description": "* Success rate % (processed / received)\n* Error rate % (failed / received)",
+          "description": "* Success rate % (processed / received)",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2255,30 +2174,18 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
               "expr": "100 *\n(\n  sum(rate(pw_order_handler_processed_total[$__rate_interval]))\n  /\n  clamp_min(sum(rate(pw_order_handler_messages_received_total[$__rate_interval])), 1e-9)\n)",
+              "hide": false,
               "legendFormat": "__auto",
               "range": true,
               "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "P15DD9179034F6BA1"
-              },
-              "editorMode": "code",
-              "expr": "100 * \n(\n  sum(rate(pw_order_handler_failed_total[$__rate_interval])) \n  / \n  clamp_min(sum(rate(pw_order_handler_messages_received_total[$__rate_interval])), 1e-9)\n)",
-              "hide": false,
-              "instant": false,
-              "legendFormat": "__auto",
-              "range": true,
-              "refId": "B"
             }
           ],
-          "title": "Success rate and Error rate",
+          "title": "Success rate",
           "type": "timeseries"
         },
         {
@@ -2441,7 +2348,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
@@ -2614,12 +2521,12 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
               "expr": "sum(rate(pw_order_handler_messages_received_total[$__rate_interval]))",
-              "hide": true,
+              "hide": false,
               "legendFormat": "__auto",
               "range": true,
               "refId": "A"
@@ -2744,11 +2651,11 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
-              "expr": "pw_order_handler_inflight_jobs",
+              "expr": "pw_order_handler_inflight_jobs{job=\"payment-worker-fast\"}",
               "legendFormat": "__auto",
               "range": true,
               "refId": "A"
@@ -2762,6 +2669,7 @@ data:
             "type": "prometheus",
             "uid": "P15DD9179034F6BA1"
           },
+          "description": "* Error rate % (failed / received)",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2784,7 +2692,7 @@ data:
                   "viz": false
                 },
                 "insertNulls": false,
-                "lineInterpolation": "stepBefore",
+                "lineInterpolation": "linear",
                 "lineWidth": 1,
                 "pointSize": 5,
                 "scaleDistribution": {
@@ -2795,7 +2703,7 @@ data:
                 "spanNulls": false,
                 "stacking": {
                   "group": "A",
-                  "mode": "none"
+                  "mode": "percent"
                 },
                 "thresholdsStyle": {
                   "mode": "off"
@@ -2814,36 +2722,26 @@ data:
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "percent"
             },
             "overrides": [
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "processPaymentError"
+                  "options": "100 * \n(\n  sum(rate(pw_order_handler_failed_total[1m0s])) \n  / \n  clamp_min(sum(rate(pw_order_handler_messages_received_total[1m0s])), 1e-9)\n)"
                 },
                 "properties": [
                   {
                     "id": "color",
                     "value": {
-                      "fixedColor": "dark-orange",
+                      "fixedColor": "dark-red",
                       "mode": "fixed"
                     }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "account locked by another process"
-                },
-                "properties": [
+                  },
                   {
-                    "id": "color",
-                    "value": {
-                      "fixedColor": "dark-orange",
-                      "mode": "fixed"
-                    }
+                    "id": "displayName",
+                    "value": "Error rate % (failed / received)"
                   }
                 ]
               }
@@ -2855,7 +2753,7 @@ data:
             "x": 0,
             "y": 16
           },
-          "id": 5,
+          "id": 10,
           "options": {
             "legend": {
               "calcs": [],
@@ -2863,23 +2761,32 @@ data:
               "placement": "bottom",
               "showLegend": true
             },
+            "timezone": [
+              "America/Toronto"
+            ],
             "tooltip": {
               "hideZeros": false,
               "mode": "single",
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "P15DD9179034F6BA1"
+              },
               "editorMode": "code",
-              "expr": "sum by (reason) (rate(pw_order_handler_dlq_total[1m]))",
+              "expr": "100 * \n(\n  sum(rate(pw_order_handler_failed_total[$__rate_interval])) \n  / \n  clamp_min(sum(rate(pw_order_handler_messages_received_total[$__rate_interval])), 1e-9)\n)",
+              "hide": false,
+              "instant": false,
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "B"
             }
           ],
-          "title": "DLQ/sec by reason",
+          "title": "Error rate",
           "type": "timeseries"
         },
         {
@@ -2995,7 +2902,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
@@ -3006,6 +2913,131 @@ data:
             }
           ],
           "title": "Failures/sec by reason",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P15DD9179034F6BA1"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepBefore",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "processPaymentError"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "account locked by another process"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 24
+          },
+          "id": 5,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "sum by (reason) (rate(pw_order_handler_dlq_total[1m]))",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "DLQ/sec by reason",
           "type": "timeseries"
         }
       ],
@@ -3024,5 +3056,5 @@ data:
       "timezone": "browser",
       "title": "Payment Worker - Prometheus",
       "uid": "adkfv6z",
-      "version": 2
+      "version": 1
     }

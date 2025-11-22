@@ -1,0 +1,23 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: payment-worker-kafka-scaler
+  namespace: apps
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    name: payment-worker
+
+  pollingInterval: 30        # seconds between checks
+  cooldownPeriod: 300        # seconds to wait before scaling down
+  minReplicaCount: 1
+  maxReplicaCount: 4
+
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka.infra.svc.cluster.local:29092
+        consumerGroup: payment-order-workers
+        topic: orders-placed
+        lagThreshold: "500"            # desired messages per replica
+        activationLagThreshold: "10"    # don't wake from 0 until >= 10 messages are available
