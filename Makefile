@@ -102,11 +102,11 @@ seed-help: ## Seed usage seeders
 
 .PHONY: seed-users-and-accounts
 seed-users-and-accounts: ## Seed Users and User accounts directly to the database
-	go run $(USER_SEED_FILE) -noOfUsers 100
+	go run $(USER_SEED_FILE) -noOfUsers 10000
 
 .PHONY: seed-orders
 seed-orders: ## Seed orders via order-api
-	go run $(ORDER_SEED_FILE) -noOfOrders 100 -noOfOrdersPerAccount 1 -rps=500 -orderApiUrl http://order-api.localtest.me # http://order-api.localtest.me, http://localhost:8081
+	go run $(ORDER_SEED_FILE) -noOfOrders 10000 -noOfOrdersPerAccount 1 -rps=500 -orderApiUrl http://order-api.localtest.me # http://order-api.localtest.me, http://localhost:8081
 
 .PHONY: seed
 seed: seed-users-and-accounts seed-orders ## Seed users accounts and orders

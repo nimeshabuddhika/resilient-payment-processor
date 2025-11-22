@@ -91,10 +91,10 @@ paymentWorker:
   # Prometheus annotation scrape via service
   metrics:
     enabled: true
-    name: "payment-worker-metrics-svc"
+    name: payment-worker-metrics-svc
     port: 2112
-    path: "/metrics"
-    scheme: "http"
+    path: /metrics
+    scheme: http
 
 fraudMlService:
   replicas: 1

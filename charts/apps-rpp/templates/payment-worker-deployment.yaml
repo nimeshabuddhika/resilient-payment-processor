@@ -4,11 +4,6 @@ metadata:
   name: {{ .Values.paymentWorker.app.name }}
   labels:
     app: {{ .Values.paymentWorker.app.name }}
-  annotations:
-    prometheus.io/scrape: {{.Values.paymentWorker.metrics.enabled  | quote}}
-    prometheus.io/port: {{.Values.paymentWorker.metrics.port | quote }}
-    prometheus.io/path: {{.Values.paymentWorker.metrics.path}}
-    prometheus.io/scheme: {{.Values.paymentWorker.metrics.scheme}}
 spec:
   replicas: {{ .Values.paymentWorker.replicas }}
   selector:
@@ -21,6 +16,11 @@ spec:
         {{- range $k, $v := .Values.paymentWorker.labels }}
         {{ $k }}: "{{ $v }}"
         {{- end }}
+      annotations:
+        prometheus.io/scrape: {{.Values.paymentWorker.metrics.enabled  | quote}}
+        prometheus.io/port: {{.Values.paymentWorker.metrics.port | quote }}
+        prometheus.io/path: {{.Values.paymentWorker.metrics.path | quote }}
+        prometheus.io/scheme: {{.Values.paymentWorker.metrics.scheme | quote }}
     spec:
       nodeSelector:
         {{ toYaml .Values.nodeSelector | indent 8 }}

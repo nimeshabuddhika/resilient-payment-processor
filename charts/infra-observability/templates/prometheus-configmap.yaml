@@ -21,7 +21,7 @@ data:
             source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
             regex: true|True|TRUE
 
-          # path from annotation (if provided)
+          # path / port / scheme come from annotations
           - action: replace
             source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_path ]
             target_label: __metrics_path__

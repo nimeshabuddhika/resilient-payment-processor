@@ -1742,7 +1742,7 @@ data:
             "sortOrder": "Descending",
             "wrapLogMessage": false
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "datasource": {
@@ -1751,7 +1751,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "{service_name=~\"^resilient-payment-processor-payment-worker-.*\"} | json | msg = `payment_processed_successfully`",
+              "expr": "{service_name=~\"^payment-worker.*\"} | json | msg = `payment_processed_successfully`",
               "queryType": "range",
               "refId": "A"
             }
@@ -1843,7 +1843,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "datasource": {
@@ -1985,7 +1985,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "datasource": {
@@ -2079,7 +2079,7 @@ data:
             "sortOrder": "Descending",
             "wrapLogMessage": false
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "datasource": {
