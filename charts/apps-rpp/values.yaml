@@ -95,9 +95,14 @@ paymentWorker:
     port: 2112
     path: /metrics
     scheme: http
+  kedaScaler:
+    pollingInterval: 30 # seconds between checks
+    cooldownPeriod: 300 # seconds to wait before scaling down
+    minReplicaCount: 1
+    maxReplicaCount: 4
+    bootstrapServersAddr: kafka.infra.svc.cluster.local:29092
 
 fraudMlService:
-  replicas: 1
   image: "rpp-registry:5000/fraud-ml-service:dev"
   port: 8082
   app:
@@ -125,3 +130,15 @@ fraudMlService:
     name: "fraud-ml-service-metrics-svc"
     path: "/metrics"
     scheme: "http"
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 60
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"

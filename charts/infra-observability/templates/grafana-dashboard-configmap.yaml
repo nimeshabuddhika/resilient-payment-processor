@@ -197,7 +197,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
@@ -409,7 +409,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
@@ -564,7 +564,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "datasource": {
@@ -697,7 +697,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
@@ -791,7 +791,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
@@ -885,7 +885,7 @@ data:
               "sort": "none"
             }
           },
-          "pluginVersion": "12.2.1",
+          "pluginVersion": "12.2.2",
           "targets": [
             {
               "editorMode": "code",
@@ -913,7 +913,7 @@ data:
       "timezone": "browser",
       "title": "Fraud ML Service - Prometheus",
       "uid": "advqdnp",
-      "version": 2
+      "version": 1
     }
   order-api-prometheus.json: |
     {

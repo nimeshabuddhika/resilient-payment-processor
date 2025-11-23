@@ -149,9 +149,6 @@ uninstall-db: ## Uninstall kafka
 
 .PHONY : init-apps
 init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)
-	$(MAKE) push
-	$(MAKE) init-nodes
-
 	@echo "Deploy order-api, payment-worker, fraud-ml-service"
 	helm upgrade --install apps-rpp $(ROOT)charts/apps-rpp -n apps
 
