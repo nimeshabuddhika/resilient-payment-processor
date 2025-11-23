@@ -4,8 +4,6 @@ nodeSelector:
 imagePullPolicy: Always
 imagePullSecrets: []  # e.g., [{ name: "rpp-registry" }]
 
-resources: {}  # set per container e.g. (limits/requests)
-
 orderApi:
   replicas: 1
   image: "rpp-registry:5000/order-api:dev"
@@ -41,6 +39,19 @@ orderApi:
     tls:
       enabled: false
       secretName: "order-api-tls"
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 60
+  resources:
+    requests:
+      cpu: "100m" # 100 millicores = 0.1 vCPU.
+      memory: "128Mi" # 128 MiB of memory capacity on the node for this pod
+    limits:
+      cpu: "500m" # Max CPU the container is allowed to use = 0.5 full vCPU.
+      memory: "512Mi" #Max memory = 500 MiB of memory capacity on the node for this pod.
+
   # Prometheus annotation scrape via service
   metrics:
     enabled: true
@@ -101,6 +112,13 @@ paymentWorker:
     minReplicaCount: 1
     maxReplicaCount: 4
     bootstrapServersAddr: kafka.infra.svc.cluster.local:29092
+  resources:
+    requests:
+      cpu: "150m"
+      memory: "256Mi"
+    limits:
+      cpu: "750m"
+      memory: "512Mi"
 
 fraudMlService:
   image: "rpp-registry:5000/fraud-ml-service:dev"
