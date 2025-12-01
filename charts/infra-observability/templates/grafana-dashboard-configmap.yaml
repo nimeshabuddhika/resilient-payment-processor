@@ -3076,10 +3076,11 @@ data:
           }
         ]
       },
+      "description": "Scope:\n* Namespace: apps\n* Apps: order-api, fraud-ml-service, payment-worker\n* Handles multiple replicas per Deployment",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 0,
-      "id": 5,
+      "id": 1,
       "links": [],
       "panels": [
         {
@@ -3087,6 +3088,7 @@ data:
             "type": "prometheus",
             "uid": "P15DD9179034F6BA1"
           },
+          "description": "Working set memory per pod. Useful to detect memory leaks or pods approaching limits.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3140,7 +3142,7 @@ data:
                   }
                 ]
               },
-              "unit": "percent"
+              "unit": "bytes"
             },
             "overrides": []
           },
@@ -3150,7 +3152,7 @@ data:
             "x": 0,
             "y": 0
           },
-          "id": 1,
+          "id": 6,
           "options": {
             "legend": {
               "calcs": [],
@@ -3158,9 +3160,6 @@ data:
               "placement": "bottom",
               "showLegend": true
             },
-            "timezone": [
-              "America/Toronto"
-            ],
             "tooltip": {
               "hideZeros": false,
               "mode": "single",
@@ -3170,18 +3169,14 @@ data:
           "pluginVersion": "12.2.2",
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "P15DD9179034F6BA1"
-              },
               "editorMode": "code",
-              "expr": "sum by (namespace, pod) (\n  rate(container_cpu_usage_seconds_total{\n    namespace=\"apps\",\n    image!=\"\",\n    pod!=\"\"\n  }[5m])\n)",
+              "expr": "sum by (namespace, pod) (\n  container_memory_working_set_bytes{\n    namespace=\"apps\",\n    image!=\"\",\n    container!=\"POD\",\n    pod=~\"order-api-.*|fraud-ml-service-.*|payment-worker-.*\"\n  }\n)",
               "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Pod CPU usage",
+          "title": "Pod Memory – Per pod",
           "type": "timeseries"
         },
         {
@@ -3189,6 +3184,7 @@ data:
             "type": "prometheus",
             "uid": "P15DD9179034F6BA1"
           },
+          "description": "Total memory usage per service across all its replicas.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3252,7 +3248,7 @@ data:
             "x": 12,
             "y": 0
           },
-          "id": 2,
+          "id": 7,
           "options": {
             "legend": {
               "calcs": [],
@@ -3270,13 +3266,593 @@ data:
           "targets": [
             {
               "editorMode": "code",
-              "expr": "sum by (namespace, pod) (\n  container_memory_working_set_bytes{\n    namespace=\"apps\",\n    image!=\"\",\n    pod!=\"\"\n  }\n)",
+              "expr": "sum by (service) (\n  label_replace(\n    container_memory_working_set_bytes{\n      namespace=\"apps\",\n      image!=\"\",\n      container!=\"POD\",\n      pod=~\"order-api-.*|fraud-ml-service-.*|payment-worker-.*\"\n    },\n    \"service\", \"$1\", \"pod\", \"(order-api|fraud-ml-service|payment-worker).*\"\n  )\n)",
+              "interval": "",
               "legendFormat": "__auto",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Pod Memory usage",
+          "title": "Pod Memory – Aggregated per Service",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P15DD9179034F6BA1"
+          },
+          "description": "CPU usage in cores per pod for all three deployments, aggregated via cAdvisor. Handles multiple replicas and shows when a specific pod is hot.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
+          "id": 4,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "P15DD9179034F6BA1"
+              },
+              "editorMode": "code",
+              "expr": "sum by (namespace, pod) (\n  rate(container_cpu_usage_seconds_total{\n    namespace=\"apps\",\n    image!=\"\",\n    container!=\"POD\"\n  }[5m])\n)",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Pod CPU - Per pod",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P15DD9179034F6BA1"
+          },
+          "description": "Total CPU cores used by each service (order-api, fraud-ml-service, payment-worker), summing across all its pods. This helps you see which app is driving CPU load regardless of replica count.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "id": 5,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "sum by (service) (\n  label_replace(\n    rate(container_cpu_usage_seconds_total{\n      namespace=\"apps\",\n      image!=\"\",\n      container!=\"POD\",\n      pod=~\"order-api-.*|fraud-ml-service-.*|payment-worker-.*\"\n    }[5m]),\n    \"service\", \"$1\", \"pod\", \"(order-api|fraud-ml-service|payment-worker).*\"\n  )\n)",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Pod CPU – Aggregated per Service",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P15DD9179034F6BA1"
+          },
+          "description": "Shows readiness status per pod. If any container in a pod is not ready, the value for that pod drops to 0. Great quick health check for each replica.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "id": 8,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "min by (namespace, pod) (\n  kube_pod_container_status_ready{\n    namespace=\"apps\",\n    pod=~\"order-api-.*|fraud-ml-service-.*|payment-worker-.*\"\n  }\n)",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Pod Readiness – 1 = Ready, 0 = Not Ready",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P15DD9179034F6BA1"
+          },
+          "description": "Number of restarts per container over the last 15 minutes. Useful to detect crash loops or noisy replicas.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 16
+          },
+          "id": 10,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "increase(\n  kube_pod_container_status_restarts_total{\n    namespace=\"apps\",\n    pod=~\"order-api-.*|fraud-ml-service-.*|payment-worker-.*\"\n  }[15m]\n)",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Container Restarts (last 15 minutes)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P15DD9179034F6BA1"
+          },
+          "description": "Table of pods where at least one container is not ready right now. Good for on-call / quick diagnosis.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 24
+          },
+          "id": 9,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "kube_pod_container_status_ready{\n  namespace=\"apps\",\n  pod=~\"order-api-.*|fraud-ml-service-.*|payment-worker-.*\"\n} == 0",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Pods Not Ready – Now",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P15DD9179034F6BA1"
+          },
+          "description": "Shows desired vs available replicas for `order-api`, `fraud-ml-service`, and `payment-worker`. Useful to verify scaling and see if pods are actually coming up.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 32
+          },
+          "id": 3,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.2.2",
+          "targets": [
+            {
+              "editorMode": "code",
+              "expr": "kube_deployment_status_replicas{\n  namespace=\"apps\",\n}",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Deployment Replica Status",
           "type": "timeseries"
         }
       ],
@@ -3293,7 +3869,7 @@ data:
       },
       "timepicker": {},
       "timezone": "browser",
-      "title": "Apps Namespace",
+      "title": "RPP – App Pods (CPU, Memory & Health)",
       "uid": "adldzhk",
       "version": 1
     }

@@ -8,7 +8,7 @@ data:
       scrape_interval: 30s
 
     scrape_configs:
-      # All annotated pods in the apps namespace
+      # Scrapes all annotated pods in apps
       - job_name: 'kubernetes-pods-annotated-apps'
         kubernetes_sd_configs:
           - role: pod
@@ -16,6 +16,10 @@ data:
               names: [ 'apps' ]
 
         relabel_configs:
+          # drop payment-worker (handled by payment-worker-fast job)
+          - action: drop
+            source_labels: [ __meta_kubernetes_pod_label_app ]
+            regex: payment-worker
           # only pods that opt-in
           - action: keep
             source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
@@ -58,9 +62,9 @@ data:
           - action: labeldrop
             regex: __meta_kubernetes_pod_annotation_prometheus_.*
 
-      # Faster scrape for payment-worker replicas
+      # Scrapes only payment-worker pods in apps
       - job_name: 'payment-worker-fast'
-        scrape_interval: 5s
+        scrape_interval: 30s
         kubernetes_sd_configs:
           - role: pod
             namespaces:
@@ -94,7 +98,7 @@ data:
             source_labels: [ __meta_kubernetes_pod_label_app ]
             target_label: app
 
-      # Kubelet cAdvisor: container/pod CPU & memory usage
+      # Scrapes node cAdvisor metrics: container/pod CPU & memory.
       - job_name: 'kubelet-cadvisor'
         scheme: https
         metrics_path: /metrics/cadvisor
@@ -117,36 +121,34 @@ data:
             regex: (.+)
             replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
 
-          # (optional) carry over node labels
+          # carry over node labels
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
 
-{{/*      # pod/node status, resource requests/limits, restarts, etc.*/}}
-{{/*      - job_name: 'kube-state-metrics'*/}}
-{{/*        scrape_interval: 30s*/}}
-{{/*        static_configs:*/}}
-{{/*          - targets:*/}}
-{{/*              - 'kube-state-metrics.infra.svc.cluster.local:8080'*/}}
-{{/*              - 'kube-state-metrics.db.svc.cluster.local:8080'*/}}
-{{/*              - 'kube-state-metrics.apps.svc.cluster.local:8080'*/}}
+      # Kube-state-metrics: pod/node status, resource requests/limits, restarts, etc.
+      - job_name: 'kube-state-metrics'
+        scrape_interval: 30s
+        static_configs:
+          - targets:
+              - 'kube-state-metrics.infra.svc.cluster.local:8080'  # infra stats
 
-{{/*      # Node exporter: node-level CPU, memory, disk, etc.*/}}
-{{/*      - job_name: 'node-exporter'*/}}
-{{/*        scrape_interval: 30s*/}}
-{{/*        kubernetes_sd_configs:*/}}
-{{/*          - role: pod*/}}
+      # Node exporter: node-level CPU, memory, disk, etc.
+      - job_name: 'node-exporter'
+        scrape_interval: 30s
+        kubernetes_sd_configs:
+          - role: pod
 
-{{/*        relabel_configs:*/}}
-{{/*          # keep only node-exporter pods*/}}
-{{/*          - action: keep*/}}
-{{/*            source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]*/}}
-{{/*            regex: prometheus-node-exporter*/}}
+        relabel_configs:
+          # keep only node-exporter pods
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: prometheus-node-exporter
 
-{{/*          # use pod IP + node-exporter port*/}}
-{{/*          - source_labels: [__meta_kubernetes_pod_ip]*/}}
-{{/*            target_label: __address__*/}}
-{{/*            replacement: $1:9100*/}}
+          # use pod IP + node-exporter port
+          - source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: $1:9100
 
-{{/*          # optional: bring node labels into Prometheus labels*/}}
-{{/*          - action: labelmap*/}}
-{{/*            regex: __meta_kubernetes_pod_node_name*/}}
+          # bring node labels into Prometheus labels
+          - action: labelmap
+            regex: __meta_kubernetes_pod_node_name

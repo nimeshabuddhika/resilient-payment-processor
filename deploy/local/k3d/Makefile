@@ -82,13 +82,21 @@ push: ## Push services images to registry
 
 ##@ Infrastructure Management
 
-.PHONY : init-keda
-init-keda: ## Install KEDA including CRDs
+.PHONY : install-keda
+install-keda: ## Install KEDA including CRDs
 	helm repo add kedacore https://kedacore.github.io/charts
 	helm repo update
 	kubectl create namespace keda || true
 	helm upgrade --install keda kedacore/keda \
       --namespace keda
+
+.PHONY : install-state-metrics
+install-state-metrics: ## Install kube-state-metrics
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	helm repo update
+	# Install kube-state-metrics
+	helm install kube-state-metrics prometheus-community/kube-state-metrics -n infra --set podLabels.app=kube-state-metrics
+
 
 .PHONY : init-nodes
 init-nodes: ## Create fundamental infrastructures
@@ -103,12 +111,14 @@ init-nodes: ## Create fundamental infrastructures
 	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
 	kubectl label node k3d-rpp-agent-3 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
 
-	@echo "Installing KEDA"
-	$(MAKE) init-keda
-
 .PHONY : init-infra
 init-infra: ## Provision kafka, redis
+	@echo "Initialize nodes"
 	$(MAKE) init-nodes
+	@echo "Installing KEDA"
+	$(MAKE) install-keda
+	@echo "Installing kube-state-metrics"
+	$(MAKE) install-state-metrics
 
 	@echo "Install Kafka"
 	helm upgrade --install infra-kafka-stack $(ROOT)charts/infra-kafka-stack -n infra
