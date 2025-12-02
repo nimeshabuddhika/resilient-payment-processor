@@ -74,21 +74,50 @@ images: builder ## Build and push services images to registry
 	docker buildx build --platform $(PLATFORM) -t $(FRAUD_ML_SERVICE_IMG) -f $(FRAUD_ML_SERVICE_DOCKERFILE) $(ROOT) --load
 	docker push $(FRAUD_ML_SERVICE_IMG)
 
+.PHONY : push
+push: ## Push services images to registry
+	docker push $(ORDER_API_IMG)
+	docker push $(PAYMENT_WORKER_IMG)
+	docker push $(FRAUD_ML_SERVICE_IMG)
+
 ##@ Infrastructure Management
+
+.PHONY : install-keda
+install-keda: ## Install KEDA including CRDs
+	helm repo add kedacore https://kedacore.github.io/charts
+	helm repo update
+	kubectl create namespace infra || true
+	helm upgrade --install keda kedacore/keda \
+      --namespace infra
+
+.PHONY : install-state-metrics
+install-state-metrics: ## Install kube-state-metrics
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	helm repo update
+	# Install kube-state-metrics
+	helm install kube-state-metrics prometheus-community/kube-state-metrics -n infra --set podLabels.app=kube-state-metrics
+
 
 .PHONY : init-nodes
 init-nodes: ## Create fundamental infrastructures
-	kubectl create ns infra
-	kubectl create ns db
-	kubectl create ns apps
+	@echo "Initializing nodes"
+	kubectl create ns infra || true
+	kubectl create ns db || true
+	kubectl create ns apps || true
 
 	@echo "Assigning labels"
 	kubectl label node k3d-rpp-agent-0 rpp=infra --overwrite #kafka, kafka-ui, redis, prometheus, grafana, loki, promtail
 	kubectl label node k3d-rpp-agent-1 rpp=db --overwrite # postgres-primary, postgres-replica-[1..2], haproxy-read, pgbouncer-*
 	kubectl label node k3d-rpp-agent-2 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
+	kubectl label node k3d-rpp-agent-3 rpp=apps --overwrite #order-api, payment-worker, fraud-ml-service
 
 .PHONY : init-infra
 init-infra: ## Provision kafka, redis
+	@echo "Installing KEDA"
+	$(MAKE) install-keda
+	@echo "Installing kube-state-metrics"
+	$(MAKE) install-state-metrics
+
 	@echo "Install Kafka"
 	helm upgrade --install infra-kafka-stack $(ROOT)charts/infra-kafka-stack -n infra
 
@@ -107,7 +136,7 @@ uninstall-infra: ## Uninstall kafka, redis
 	helm uninstall infra-kafka-stack -n infra
 	helm uninstall infra-redis -n infra
 	helm uninstall infra-observability -n infra
-	#kubectl -n infra delete pvc data-infra-redis-redis-0 data-kafka-0 data-redis-0
+	kubectl -n infra delete pvc data-kafka-0 data-redis-0 grafana-data loki-data prometheus-data
 
 
 .PHONY : init-db
@@ -137,3 +166,23 @@ init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)
 uninstall-apps: ## Uninstall apps (order-api, payment-worker, fraud-ml-service)
 	helm list -n apps
 	helm uninstall apps-rpp -n apps
+
+.PHONY : up-all
+up-all: ## Provision all K8s infrastructures
+	@echo "Initialize rpp cluster"
+	$(MAKE) up
+
+	@echo "Initialize nodes"
+	$(MAKE) init-nodes
+
+	@echo "Deploy infrastructures"
+	$(MAKE) init-infra
+
+	@echo "Deploy db"
+	$(MAKE) init-db
+
+	@echo "Build and push service images"
+	$(MAKE) images
+
+	@echo "Deploy apps"
+	$(MAKE) init-apps

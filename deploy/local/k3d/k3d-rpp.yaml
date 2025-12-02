@@ -3,7 +3,7 @@ kind: Simple
 metadata:
   name: rpp
 servers: 1
-agents: 3
+agents: 4
 image: rancher/k3s:v1.34.1-k3s1
 # Expose HTTP via the k3d load balancer
 ports:

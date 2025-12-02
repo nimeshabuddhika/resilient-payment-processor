@@ -15,6 +15,7 @@ DATA_PATH = "ai_dataset.json"
 MODEL_PATH = "fraud_model.onnx"
 FEATURE_ORDER = ["amount", "transactionVelocity", "amountDeviation"]
 
+
 def main():
     # Load dataset
     with open(DATA_PATH, "r") as f:
@@ -63,6 +64,7 @@ def main():
 
     print(f"model_exported_to: {MODEL_PATH}")
     print(f"feature_order: {FEATURE_ORDER}")
+
 
 if __name__ == "__main__":
     main()
