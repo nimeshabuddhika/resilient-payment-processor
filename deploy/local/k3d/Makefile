@@ -86,9 +86,9 @@ push: ## Push services images to registry
 install-keda: ## Install KEDA including CRDs
 	helm repo add kedacore https://kedacore.github.io/charts
 	helm repo update
-	kubectl create namespace keda || true
+	kubectl create namespace infra || true
 	helm upgrade --install keda kedacore/keda \
-      --namespace keda
+      --namespace infra
 
 .PHONY : install-state-metrics
 install-state-metrics: ## Install kube-state-metrics
@@ -113,8 +113,6 @@ init-nodes: ## Create fundamental infrastructures
 
 .PHONY : init-infra
 init-infra: ## Provision kafka, redis
-	@echo "Initialize nodes"
-	$(MAKE) init-nodes
 	@echo "Installing KEDA"
 	$(MAKE) install-keda
 	@echo "Installing kube-state-metrics"
@@ -143,7 +141,6 @@ uninstall-infra: ## Uninstall kafka, redis
 
 .PHONY : init-db
 init-db: ## Provision Postgres Database
-	$(MAKE) init-nodes
 	@echo "Install Postgres"
 	helm upgrade --install db-stack $(ROOT)charts/db-stack -n db
 
@@ -169,3 +166,23 @@ init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)
 uninstall-apps: ## Uninstall apps (order-api, payment-worker, fraud-ml-service)
 	helm list -n apps
 	helm uninstall apps-rpp -n apps
+
+.PHONY : up-all
+up-all: ## Provision all K8s infrastructures
+	@echo "Initialize rpp cluster"
+	$(MAKE) up
+
+	@echo "Initialize nodes"
+	$(MAKE) init-nodes
+
+	@echo "Deploy infrastructures"
+	$(MAKE) init-infra
+
+	@echo "Deploy db"
+	$(MAKE) init-db
+
+	@echo "Build and push service images"
+	$(MAKE) images
+
+	@echo "Deploy apps"
+	$(MAKE) init-apps
