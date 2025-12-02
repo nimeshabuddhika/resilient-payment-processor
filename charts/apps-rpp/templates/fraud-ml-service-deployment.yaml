@@ -5,7 +5,7 @@ metadata:
   labels:
     app: {{.Values.fraudMlService.app.name}}
 spec:
-  replicas: {{ .Values.fraudMlService.replicas }}
+  replicas: {{ .Values.fraudMlService.hpa.minReplicas }}
   selector:
     matchLabels:
       app: {{.Values.fraudMlService.app.name}}
@@ -45,4 +45,4 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
           resources:
-{{ toYaml .Values.resources | indent 12 }}
+{{ toYaml .Values.fraudMlService.resources | indent 12 }}

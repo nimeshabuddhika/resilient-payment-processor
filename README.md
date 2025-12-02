@@ -23,19 +23,22 @@ Aligned with event-driven best practices: decoupling via Kafka for scalability, 
 Everything you need to understand, run, and extend the system lives in `./docs`. Start here:
 
 ### At a glance
-| Audience      | Start with                                                                                                | Why                                                                                  |
-|---------------|-----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
-| New readers   | [/docs/observability/README.md](docs/observability/README.md)                                             | High-level overview of metrics, dashboards, and how to observe the system end-to-end |
-| Backend devs  | [/docs/observability/ORDER_API_OBSERVABILITY.md](docs/observability/ORDER_API_OBSERVABILITY.md)           | Order API Prometheus metrics + Grafana queries                                       |
-| Worker devs   | [/docs/observability/PAYMENT_WORKER_OBSERVABILITY.md](docs/observability/PAYMENT_WORKER_OBSERVABILITY.md) | Payment Worker Prometheus metrics + Grafana queries                                  |
-| ML/Platform   | [/docs/fraud-ml-service/README.md](docs/fraud-ml-service/README.md)                                       | Fraud ML service: model, ONNX, inference, API                                        |
-| Infra/DB      | [/docs/postgres/README.md](docs/postgres/README.md)                                                       | HA Postgres (Primary + Read Replicas) with PgBouncer + HAProxy                       |
-| API consumers | [/docs/open-api/order-api](docs/open-api/order-api)                                                       | Swagger/OpenAPI for `order-api`                                                      |
+| Audience                 | Start with                                                                                                | Why                                                                                  |
+|--------------------------|-----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| New readers              | [/docs/observability/README.md](docs/observability/README.md)                                             | High-level overview of metrics, dashboards, and how to observe the system end-to-end |
+| Backend devs             | [/docs/observability/ORDER_API_OBSERVABILITY.md](docs/observability/ORDER_API_OBSERVABILITY.md)           | Order API Prometheus metrics + Grafana queries                                       |
+| Worker devs              | [/docs/observability/PAYMENT_WORKER_OBSERVABILITY.md](docs/observability/PAYMENT_WORKER_OBSERVABILITY.md) | Payment Worker Prometheus metrics + Grafana queries                                  |
+| ML/Platform              | [/docs/fraud-ml-service/README.md](docs/fraud-ml-service/README.md)                                       | Fraud ML service: model, ONNX, inference, API                                        |
+| Kubernetes / Autoscaling | [/docs/kubernetes-autoscaling/README.md](docs/kubernetes-autoscaling/README.md)                           | Kubernetes deployment on k3d, node layout, and autoscaling strategy with HPA + KEDA  |
+| Infra/DB                 | [/docs/postgres/README.md](docs/postgres/README.md)                                                       | HA Postgres (Primary + Read Replicas) with PgBouncer + HAProxy                       |
+| API consumers            | [/docs/open-api/order-api](docs/open-api/order-api)                                                       | Swagger/OpenAPI for `order-api`                                                      |
 
 ```filetree
 ./docs
 ├─ fraud-ml-service
 │ └─ README.md # Fraud ML service (training → ONNX → inference API)
+├─ kubernetes-autoscaling
+│ └─ README.md # Kubernetes Deployment & Autoscaling (k3d Local Environment)
 ├─ observability
 │ ├─ README.md # Observability overview (Prometheus + Grafana)
 │ ├─ ORDER_API_OBSERVABILITY.md # Order API dashboards & queries

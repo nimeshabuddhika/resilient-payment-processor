@@ -1,0 +1,22 @@
+{{- if .Values.orderApi.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.orderApi.app.name }}-hpa
+  labels:
+    app: {{ .Values.orderApi.app.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.orderApi.app.name }}
+  minReplicas: {{ .Values.orderApi.hpa.minReplicas }}
+  maxReplicas: {{ .Values.orderApi.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.orderApi.hpa.targetCPUUtilizationPercentage }}
+{{- end }}

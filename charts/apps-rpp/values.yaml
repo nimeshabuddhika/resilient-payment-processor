@@ -4,8 +4,6 @@ nodeSelector:
 imagePullPolicy: Always
 imagePullSecrets: []  # e.g., [{ name: "rpp-registry" }]
 
-resources: {}  # set per container e.g. (limits/requests)
-
 orderApi:
   replicas: 1
   image: "rpp-registry:5000/order-api:dev"
@@ -41,6 +39,19 @@ orderApi:
     tls:
       enabled: false
       secretName: "order-api-tls"
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 60
+  resources:
+    requests:
+      cpu: "100m" # 100 millicores = 0.1 vCPU.
+      memory: "128Mi" # 128 MiB of memory capacity on the node for this pod
+    limits:
+      cpu: "500m" # Max CPU the container is allowed to use = 0.5 full vCPU.
+      memory: "512Mi" #Max memory = 500 MiB of memory capacity on the node for this pod.
+
   # Prometheus annotation scrape via service
   metrics:
     enabled: true
@@ -78,10 +89,10 @@ paymentWorker:
     APP_RETRY_BASE_BACKOFF: "30s"
     APP_MAX_RETRY_BACKOFF: "5m"
     APP_MAX_RETRY_COUNT: "3"
-    APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "1000"
-    APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "1000"
+    APP_MAX_ORDERS_PLACED_CONCURRENT_JOBS: "500"
+    APP_MAX_ORDERS_RETRY_CONCURRENT_JOBS: "500"
     APP_FRAUD_ML_SERVICE_ADDR: "http://fraud-ml-svc:8082"
-    APP_ML_RATE_LIMIT_PER_SEC: "1000"
+    APP_ML_RATE_LIMIT_PER_SEC: "500"
     APP_ML_REQUEST_BURST: "60"
     APP_ML_REQUEST_MAX_THROTTLE_WAIT: "1s"
   secrets:
@@ -91,13 +102,25 @@ paymentWorker:
   # Prometheus annotation scrape via service
   metrics:
     enabled: true
-    name: "payment-worker-metrics-svc"
+    name: payment-worker-metrics-svc
     port: 2112
-    path: "/metrics"
-    scheme: "http"
+    path: /metrics
+    scheme: http
+  kedaScaler:
+    pollingInterval: 30 # seconds between checks
+    cooldownPeriod: 300 # seconds to wait before scaling down
+    minReplicaCount: 1
+    maxReplicaCount: 4
+    bootstrapServersAddr: kafka.infra.svc.cluster.local:29092
+  resources:
+    requests:
+      cpu: "150m"
+      memory: "256Mi"
+    limits:
+      cpu: "750m"
+      memory: "512Mi"
 
 fraudMlService:
-  replicas: 1
   image: "rpp-registry:5000/fraud-ml-service:dev"
   port: 8082
   app:
@@ -125,3 +148,15 @@ fraudMlService:
     name: "fraud-ml-service-metrics-svc"
     path: "/metrics"
     scheme: "http"
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 60
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"

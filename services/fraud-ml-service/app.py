@@ -125,6 +125,7 @@ except Exception:
     logger.exception("onnx_model_load_failed")
     raise
 
+
 # -------- Helpers --------
 def _extract_features(payload: Dict[str, Any]) -> np.ndarray:
     """
@@ -137,10 +138,12 @@ def _extract_features(payload: Dict[str, Any]) -> np.ndarray:
     except Exception:
         raise ValueError(f"invalid_payload: required keys {FEATURE_ORDER} as numbers")
 
+
 # -------- Flask hooks for HTTP metrics --------
 @app.before_request
 def _before_request():
     g._start_time = time.perf_counter()
+
 
 @app.after_request
 def _after_request(resp):
@@ -160,11 +163,13 @@ def _after_request(resp):
         logger.exception("metrics_after_request_error")
     return resp
 
+
 # -------- Routes --------
 @app.get("/healthz")
 def healthz():
     # Liveness: process is up
     return jsonify({"ok": True}), 200
+
 
 @app.get("/ready")
 def ready():
@@ -172,6 +177,7 @@ def ready():
     if MODEL_LOADED:
         return jsonify({"ready": True}), 200
     return jsonify({"ready": False}), 503
+
 
 @app.post("/api/v1/fraud-ml/predict")
 def predict():
@@ -209,11 +215,13 @@ def predict():
         logger.exception("prediction_failed")
         return jsonify({"error": "internal_server_error"}), 500
 
+
 @app.get("/metrics")
 def metrics():
     # Single-process metrics only
     data = generate_latest(REGISTRY)
     return (data, 200, {"Content-Type": CONTENT_TYPE_LATEST})
+
 
 if __name__ == "__main__":
     # Dev server (for local). In container, use Gunicorn (see Dockerfile).
