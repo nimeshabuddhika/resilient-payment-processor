@@ -3058,7 +3058,7 @@ data:
       "uid": "adkfv6z",
       "version": 1
     }
-  apps-node-status-prometheus.json: |
+  apps-pods-status-prometheus.json: |
     {
       "annotations": {
         "list": [
