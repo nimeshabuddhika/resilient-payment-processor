@@ -3335,7 +3335,7 @@ data:
                   }
                 ]
               },
-              "unit": "percent"
+              "unit": "CPU core"
             },
             "overrides": []
           },
@@ -3431,7 +3431,7 @@ data:
                   }
                 ]
               },
-              "unit": "percent"
+              "unit": "CPU core"
             },
             "overrides": []
           },
