@@ -92,13 +92,31 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 	}()
 
 	if !locked {
-		p.Logger.Info("account_locked_by_another_process", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
+		p.Logger.Warn("account_locked_by_another_process", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
 		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "Account locked by another process")
 		p.RetryChannel <- job // send to retry order topic
 		return fmt.Errorf("account locked by another process")
 	}
 	defer p.RedisClient.Del(ctx, lockKey) // Release after
 	p.Logger.Info("lock_acquired_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
+
+	// Check if order is already processed
+	order, err := p.OrderRepo.FindByIdempotencyKey(ctx, job.IdempotencyKey)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			p.Logger.Warn("order_not_found_retrying", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+			p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "retrying due to order not found")
+			p.RetryChannel <- job
+			return fmt.Errorf("order not found, retrying")
+		}
+		p.Logger.Error("failed_to_find_order", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
+		return err
+	}
+	if pkg.OrderStatusSuccess == order.Status {
+		p.Logger.Error("order_already_processed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+		return fmt.Errorf("order already processed")
+	}
+	p.Logger.Info("order_found_for_processing", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("status", order.Status))
 
 	// Decrypt transaction amount
 	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.EncryptionKey)
