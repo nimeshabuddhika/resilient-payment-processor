@@ -39,6 +39,8 @@ var (
 
 const (
 	TransactionProcessingDelay = 100 * time.Millisecond
+	RedisIdempotencyKey        = "idempo:payment:%s"
+	RedisIdempotencyTtl        = 48 * time.Hour
 )
 
 // TransactionResult represents the outcome of a transaction attempt.
@@ -101,22 +103,13 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 	p.Logger.Info("lock_acquired_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
 
 	// Check if order is already processed
-	order, err := p.OrderRepo.FindByIdempotencyKey(ctx, job.IdempotencyKey)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			p.Logger.Warn("order_not_found_retrying", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
-			p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "retrying due to order not found")
-			p.RetryChannel <- job
-			return fmt.Errorf("order not found, retrying")
-		}
-		p.Logger.Error("failed_to_find_order", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
-		return err
-	}
-	if pkg.OrderStatusSuccess == order.Status {
+	idempotencyRedisKey := getIdempotencyRedisKey(job.IdempotencyKey)
+	exists, err := p.RedisClient.Exists(ctx, idempotencyRedisKey).Result()
+	if err == nil && exists == 1 {
 		p.Logger.Error("order_already_processed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 		return fmt.Errorf("order already processed")
 	}
-	p.Logger.Info("order_found_for_processing", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("status", order.Status))
+	p.Logger.Debug("order_not_processed_yet", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 
 	// Decrypt transaction amount
 	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.EncryptionKey)
@@ -179,6 +172,13 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 		return err
 	}
 	p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusSuccess, "Payment completed successfully")
+	// Set idempotency cache to done
+	if err = p.RedisClient.Set(context.Background(), idempotencyRedisKey, "done", RedisIdempotencyTtl).Err(); err != nil {
+		p.Logger.Error("failed_to_set_idempotency_cache", zap.Error(err),
+			zap.String("idempotency_key", job.IdempotencyKey.String()),
+			zap.Error(err))
+		return fmt.Errorf("failed to set idempotency cache")
+	}
 	return nil
 }
 
@@ -298,9 +298,14 @@ func (p *PaymentProcessorConfig) UpdateBalanceAvgCount(ctx context.Context, tx p
 		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		return err
 	}
-	// Cache
+	// Update Deviation Redis Cache
 	cacheKey := GetDeviationRedisKey(account.ID)
 	p.RedisClient.Set(ctx, cacheKey, fmt.Sprintf("%f", newAvg), DeviationCacheTTL)
 	p.Logger.Info("account_balance_updated_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int64("affected_rows", affectedRows))
 	return nil
+}
+
+// getIdempotencyRedisKey generates a Redis key string specific to an idempotency key using a predefined format.
+func getIdempotencyRedisKey(idempotencyKey uuid.UUID) string {
+	return fmt.Sprintf(RedisIdempotencyKey, idempotencyKey)
 }
