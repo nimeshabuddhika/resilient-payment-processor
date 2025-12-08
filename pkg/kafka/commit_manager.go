@@ -43,7 +43,7 @@ func (m *CommitManager) Ack(idempotencyKey uuid.UUID, msg *kafka.Message) {
 	key := tp{topic: topic, partition: partition}
 
 	// Log each ack for traceability in observability tools.
-	m.log.Info("offsetting_message",
+	m.log.Debug("offsetting_message",
 		zap.Any("idempotency_key", idempotencyKey),
 		zap.String("topic", topic),
 		zap.Int32("partition", partition),
@@ -109,7 +109,7 @@ func (m *CommitManager) Ack(idempotencyKey uuid.UUID, msg *kafka.Message) {
 			delete(m.done, key)
 		}
 
-		m.log.Info("offset_committed",
+		m.log.Debug("offset_committed",
 			zap.Any(pkg.IdempotencyKey, idempotencyKey),
 			zap.String("topic", key.topic),
 			zap.Int32("partition", key.partition),

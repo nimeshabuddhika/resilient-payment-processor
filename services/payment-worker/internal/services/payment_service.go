@@ -242,9 +242,9 @@ func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job dtos
 
 // updateOrderStatus updates the order status in the database and logs the outcome.
 func (p *PaymentProcessorConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
-	affectedRows, err := p.OrderRepo.UpdateStatusByIdempotencyIDTx(ctx, tx, idempotencyKey, status, message)
-	if err != nil {
-		p.Logger.Error("failed_to_update_order_status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status))
+	affectedRows, err := p.OrderRepo.UpdateStatusIfNotSucceededByIdempotencyKeyTx(ctx, tx, idempotencyKey, status, message)
+	if err != nil || affectedRows != 1 {
+		p.Logger.Error("failed_to_update_order_status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status), zap.Int64("affected_rows", affectedRows))
 		// TODO: Implement order DLQ logic
 		return
 	}
@@ -293,8 +293,8 @@ func (p *PaymentProcessorConfig) UpdateBalanceAvgCount(ctx context.Context, tx p
 	account.OrderCount = count
 	account.AvgOrderAmount = newAvgEnc
 
-	affectedRows, err := p.UserRepo.UpdateBalanceCountAvgByAccountID(ctx, tx, account)
-	if err != nil {
+	affectedRows, err := p.AccountRepo.UpdateAccountSummaryForOrderTx(ctx, tx, job.IdempotencyKey, account)
+	if err != nil || affectedRows != 1 {
 		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		return err
 	}

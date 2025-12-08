@@ -23,9 +23,10 @@ type OrderRepository interface {
 
 	// ExistsByIdempotencyKey checks if a record with the given idempotency key exists in the database.
 	ExistsByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (bool, error)
-	// UpdateStatusByIdempotencyIDTx updates the status of an order by idempotency key.
-	// transaction is required to ensure idempotency.
-	UpdateStatusByIdempotencyIDTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
+
+	// UpdateStatusIfNotSucceededByIdempotencyKeyTx updates the status of an order by idempotency key in a transaction.
+	// Returns the number of rows affected.
+	UpdateStatusIfNotSucceededByIdempotencyKeyTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
 	// UpdateStatusByIdempotencyID updates the status of an order by idempotency key.
 	// transaction is not required to ensure idempotency.
 	UpdateStatusByIdempotencyID(ctx context.Context, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
@@ -82,9 +83,9 @@ func (o *OrderRepositoryImpl) ExistsByIdempotencyKey(ctx context.Context, idempo
 	return exists, err
 }
 
-func (o *OrderRepositoryImpl) UpdateStatusByIdempotencyIDTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error) {
-	commandTag, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4`,
-		status, message, time.Now(), idempotencyID)
+func (o *OrderRepositoryImpl) UpdateStatusIfNotSucceededByIdempotencyKeyTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error) {
+	commandTag, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4 AND status != $5`,
+		status, message, time.Now(), idempotencyID, pkg.OrderStatusSuccess)
 	if err != nil {
 		return 0, err
 	}

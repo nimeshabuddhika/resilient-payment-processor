@@ -13,7 +13,6 @@ import (
 type UserRepository interface {
 	// Create creates a new user.
 	Create(ctx context.Context, tx pgx.Tx, user models.User) (pgconn.CommandTag, error)
-	UpdateBalanceCountAvgByAccountID(ctx context.Context, tx pgx.Tx, account models.Account) (int64, error)
 	FindUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error)
 }
 
@@ -34,19 +33,6 @@ func (u UserRepositoryImpl) Create(ctx context.Context, tx pgx.Tx, user models.U
 		user.CreatedAt,
 		user.UpdatedAt,
 	)
-}
-
-func (u UserRepositoryImpl) UpdateBalanceCountAvgByAccountID(ctx context.Context, tx pgx.Tx, account models.Account) (int64, error) {
-	commandTag, err := tx.Exec(ctx, `UPDATE accounts SET balance = $1, order_count = $2, avg_order_amount = $3, updated_at = NOW() WHERE id = $4`,
-		account.Balance,
-		account.OrderCount,
-		account.AvgOrderAmount,
-		account.ID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return commandTag.RowsAffected(), nil
 }
 
 func (u UserRepositoryImpl) FindUsers(ctx context.Context, pageNumber int, size int) ([]models.User, error) {
