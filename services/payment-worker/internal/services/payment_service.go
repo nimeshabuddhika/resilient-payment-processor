@@ -39,6 +39,8 @@ var (
 
 const (
 	TransactionProcessingDelay = 100 * time.Millisecond
+	RedisIdempotencyKey        = "idempo:payment:%s"
+	RedisIdempotencyTtl        = 48 * time.Hour
 )
 
 // TransactionResult represents the outcome of a transaction attempt.
@@ -92,13 +94,22 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 	}()
 
 	if !locked {
-		p.Logger.Info("account_locked_by_another_process", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
+		p.Logger.Warn("account_locked_by_another_process", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
 		p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusRetrying, "Account locked by another process")
 		p.RetryChannel <- job // send to retry order topic
 		return fmt.Errorf("account locked by another process")
 	}
 	defer p.RedisClient.Del(ctx, lockKey) // Release after
 	p.Logger.Info("lock_acquired_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Any("account_id", job.AccountID))
+
+	// Check if order is already processed
+	idempotencyRedisKey := getIdempotencyRedisKey(job.IdempotencyKey)
+	exists, err := p.RedisClient.Exists(ctx, idempotencyRedisKey).Result()
+	if err == nil && exists == 1 {
+		p.Logger.Error("order_already_processed", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
+		return fmt.Errorf("order already processed")
+	}
+	p.Logger.Debug("order_not_processed_yet", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey))
 
 	// Decrypt transaction amount
 	transactionAmount, err := utils.DecryptToFloat64(job.Amount, p.EncryptionKey)
@@ -161,6 +172,13 @@ func (p *PaymentProcessorConfig) ProcessPayment(ctx context.Context, job dtos.Pa
 		return err
 	}
 	p.updateOrderStatus(ctx, tx, job.IdempotencyKey, pkg.OrderStatusSuccess, "Payment completed successfully")
+	// Set idempotency cache to done
+	if err = p.RedisClient.Set(context.Background(), idempotencyRedisKey, "done", RedisIdempotencyTtl).Err(); err != nil {
+		p.Logger.Error("failed_to_set_idempotency_cache", zap.Error(err),
+			zap.String("idempotency_key", job.IdempotencyKey.String()),
+			zap.Error(err))
+		return fmt.Errorf("failed to set idempotency cache")
+	}
 	return nil
 }
 
@@ -224,9 +242,9 @@ func (p *PaymentProcessorConfig) handleFraudResult(ctx context.Context, job dtos
 
 // updateOrderStatus updates the order status in the database and logs the outcome.
 func (p *PaymentProcessorConfig) updateOrderStatus(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, status pkg.OrderStatus, message string) {
-	affectedRows, err := p.OrderRepo.UpdateStatusByIdempotencyIDTx(ctx, tx, idempotencyKey, status, message)
-	if err != nil {
-		p.Logger.Error("failed_to_update_order_status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status))
+	affectedRows, err := p.OrderRepo.UpdateStatusIfNotSucceededByIdempotencyKeyTx(ctx, tx, idempotencyKey, status, message)
+	if err != nil || affectedRows != 1 {
+		p.Logger.Error("failed_to_update_order_status", zap.Any(pkg.IdempotencyKey, idempotencyKey), zap.Error(err), zap.Any("order_status", status), zap.Int64("affected_rows", affectedRows))
 		// TODO: Implement order DLQ logic
 		return
 	}
@@ -275,14 +293,19 @@ func (p *PaymentProcessorConfig) UpdateBalanceAvgCount(ctx context.Context, tx p
 	account.OrderCount = count
 	account.AvgOrderAmount = newAvgEnc
 
-	affectedRows, err := p.UserRepo.UpdateBalanceCountAvgByAccountID(ctx, tx, account)
-	if err != nil {
+	affectedRows, err := p.AccountRepo.UpdateAccountSummaryForOrderTx(ctx, tx, job.IdempotencyKey, account)
+	if err != nil || affectedRows != 1 {
 		p.Logger.Error("failed_to_update_account_balance", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Error(err))
 		return err
 	}
-	// Cache
+	// Update Deviation Redis Cache
 	cacheKey := GetDeviationRedisKey(account.ID)
 	p.RedisClient.Set(ctx, cacheKey, fmt.Sprintf("%f", newAvg), DeviationCacheTTL)
 	p.Logger.Info("account_balance_updated_successfully", zap.Any(pkg.IdempotencyKey, job.IdempotencyKey), zap.Int64("affected_rows", affectedRows))
 	return nil
+}
+
+// getIdempotencyRedisKey generates a Redis key string specific to an idempotency key using a predefined format.
+func getIdempotencyRedisKey(idempotencyKey uuid.UUID) string {
+	return fmt.Sprintf(RedisIdempotencyKey, idempotencyKey)
 }

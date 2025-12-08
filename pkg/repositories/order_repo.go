@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,10 +17,16 @@ import (
 type OrderRepository interface {
 	// Create creates a new order.
 	Create(ctx context.Context, tx pgx.Tx, order models.Order) (pgconn.CommandTag, error)
-	FindByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (bool, error)
-	// UpdateStatusByIdempotencyIDTx updates the status of an order by idempotency key.
-	// transaction is required to ensure idempotency.
-	UpdateStatusByIdempotencyIDTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
+
+	// FindByIdempotencyKey retrieves an order from the database using the specified idempotency key.
+	FindByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (models.Order, error)
+
+	// ExistsByIdempotencyKey checks if a record with the given idempotency key exists in the database.
+	ExistsByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (bool, error)
+
+	// UpdateStatusIfNotSucceededByIdempotencyKeyTx updates the status of an order by idempotency key in a transaction.
+	// Returns the number of rows affected.
+	UpdateStatusIfNotSucceededByIdempotencyKeyTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
 	// UpdateStatusByIdempotencyID updates the status of an order by idempotency key.
 	// transaction is not required to ensure idempotency.
 	UpdateStatusByIdempotencyID(ctx context.Context, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error)
@@ -51,8 +58,20 @@ func (o *OrderRepositoryImpl) Create(ctx context.Context, tx pgx.Tx, order model
 	)
 }
 
-// FindByIdempotencyKey finds an order by idempotency key.
-func (o *OrderRepositoryImpl) FindByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (bool, error) {
+func (o *OrderRepositoryImpl) FindByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (models.Order, error) {
+	if uuid.Nil == idempotencyID {
+		return models.Order{}, fmt.Errorf("idempotency key cannot be nil")
+	}
+	var order models.Order
+	err := o.db.QueryRow(ctx, `SELECT id, user_id, account_id, idempotency_key, amount, currency, status, message, created_at, updated_at FROM orders WHERE idempotency_key = $1`, idempotencyID).Scan(
+		&order.ID, &order.UserID, &order.AccountID, &order.IdempotencyKey, &order.Amount, &order.Currency, &order.Status, &order.Message, &order.CreatedAt, &order.UpdatedAt)
+	return order, err
+}
+
+// ExistsByIdempotencyKey checks if an order exists in the database with the provided idempotency key.
+// Returns a boolean indicating existence and an error if the query fails.
+// An error is also returned if the idempotency key is nil.
+func (o *OrderRepositoryImpl) ExistsByIdempotencyKey(ctx context.Context, idempotencyID uuid.UUID) (bool, error) {
 	if idempotencyID == uuid.Nil {
 		return false, errors.New("idempotency key cannot be nil")
 	}
@@ -64,9 +83,9 @@ func (o *OrderRepositoryImpl) FindByIdempotencyKey(ctx context.Context, idempote
 	return exists, err
 }
 
-func (o *OrderRepositoryImpl) UpdateStatusByIdempotencyIDTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error) {
-	commandTag, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4`,
-		status, message, time.Now(), idempotencyID)
+func (o *OrderRepositoryImpl) UpdateStatusIfNotSucceededByIdempotencyKeyTx(ctx context.Context, tx pgx.Tx, idempotencyID uuid.UUID, status pkg.OrderStatus, message string) (int64, error) {
+	commandTag, err := tx.Exec(ctx, `UPDATE orders SET status = $1, message = $2, updated_at = $3 WHERE idempotency_key = $4 AND status != $5`,
+		status, message, time.Now(), idempotencyID, pkg.OrderStatusSuccess)
 	if err != nil {
 		return 0, err
 	}

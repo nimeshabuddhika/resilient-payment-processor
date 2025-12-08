@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nimeshabuddhika/resilient-payment-processor/pkg"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/database"
 	"github.com/nimeshabuddhika/resilient-payment-processor/pkg/models"
 )
@@ -18,6 +19,7 @@ type AccountRepository interface {
 	// FindByID finds an account by ID.
 	FindByID(ctx context.Context, accountID uuid.UUID) (models.Account, error)
 	GetAccountsByUserID(ctx context.Context, userID uuid.UUID, pageNumber int, size int) ([]models.Account, error)
+	UpdateAccountSummaryForOrderTx(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, account models.Account) (int64, error)
 }
 
 type AccountRepositoryImpl struct {
@@ -68,4 +70,31 @@ func (a AccountRepositoryImpl) GetAccountsByUserID(ctx context.Context, userID u
 		return nil, err
 	}
 	return accounts, nil
+}
+
+func (a AccountRepositoryImpl) UpdateAccountSummaryForOrderTx(ctx context.Context, tx pgx.Tx, idempotencyKey uuid.UUID, account models.Account) (int64, error) {
+	commandTag, err := tx.Exec(ctx, `
+				UPDATE accounts a 
+				SET 
+					balance = $1, 
+					order_count = $2,
+					avg_order_amount = $3,
+					updated_at = NOW()
+			  	FROM orders o
+			  	WHERE 
+				  	a.id = $4 
+					AND a.id = o.account_id 
+			  	  	AND o.idempotency_key = $5 
+			  	  	AND o.status != $6`,
+		account.Balance,
+		account.OrderCount,
+		account.AvgOrderAmount,
+		account.ID,
+		idempotencyKey,
+		pkg.OrderStatusSuccess,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return commandTag.RowsAffected(), nil
 }

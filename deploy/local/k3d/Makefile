@@ -160,7 +160,7 @@ init-apps: ## Deploy apps (order-api, payment-worker, fraud-ml-service)
 	helm upgrade --install apps-rpp $(ROOT)charts/apps-rpp -n apps
 
     # Wait and check the external NodePort
-	kubectl -n apps get po -o wide
+	kubectl get po -o wide -n apps
 
 .PHONY : uninstall-apps
 uninstall-apps: ## Uninstall apps (order-api, payment-worker, fraud-ml-service)
@@ -180,6 +180,9 @@ up-all: ## Provision all K8s infrastructures
 
 	@echo "Deploy db"
 	$(MAKE) init-db
+
+	@echo "Clean images"
+	$(MAKE) clean-images
 
 	@echo "Build and push service images"
 	$(MAKE) images
